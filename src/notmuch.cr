@@ -298,7 +298,7 @@ module Notmuch
       end
     end
     if exit_status != 0
-      debug "notmuch insert returned exit status #{exit_status}"
+      debug "notmuch search returned exit status #{exit_status}"
     end
     return ret
   end
