@@ -52,7 +52,7 @@ class Mode
       [CLASSNAME] + super
     end
     {% if names.size > 0 %}
-    Redwood.actions({{*names}})
+    Redwood.actions({{names.splat}})
     {% end %}
   end
 
