@@ -709,7 +709,7 @@ class ThreadData
 
   # Replace the top level message with the specified message.
   # Then set the thread for each message in the tree, and update
-  # the thread size.
+  # the thread size and date widget.
   def set_msg(m : Message)
     @msg = m
     @size = 0
@@ -717,6 +717,7 @@ class ThreadData
       msg.thread = self
       @size += 1
     end
+    @date_widget = self.date.to_local.to_nice_s
   end
 
   def to_s : String	# for creating debug messages
