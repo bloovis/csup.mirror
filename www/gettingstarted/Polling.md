@@ -20,7 +20,7 @@ poll_interval: 300
 prompt.
 
 When Csup polls, it first calls the user's
-[before-poll hook]({{< relref "Hooks#before-poll" >}}).  This hook
+[before-poll hook](../advancedusage/Hooks.md#before-poll).  This hook
 can fetch mail using `fetchmail` or any other mail retrieval program.
 The mail must be stored in a maildir visible to notmuch.
 

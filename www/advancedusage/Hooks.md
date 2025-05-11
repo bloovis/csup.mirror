@@ -23,7 +23,9 @@ and uses that as the "value" of the hook.
 
 Here is the list of hooks that Csup currently supports.
 
+<span id="before-poll">
 ## before-poll
+</span>
 
 Csup calls this hook just before it calls `notmuch new`.  This gives the hook the opportunity
 to fetch mail, perhaps using `fetchmail`.  If successful, the hook should return
@@ -39,7 +41,9 @@ fetchmail >>/tmp/fetchmail.log
 exit 0	# always return 0 because fetchmail returns non-zero if no messages
 ```
 
+<span id="mime-decode">
 ## mime-decode
+</span>
 
 Csup calls this hook to convert mime-encoded content (typically HTML) to plain text
 for displaying in a thread view.
@@ -69,7 +73,9 @@ text/plain)
 esac
 ```
 
+<span id="mime-view">
 ## mime-view
+</span>
 
 Csup calls this hook when the user wants to view mime-encoded content (typically
 PDF or image) in an external program.
@@ -185,7 +191,9 @@ t = Time.at(timestamp)
 puts "The Great and Powerful #{name} wrote the following on #{t.strftime('%B %H, %Y at %H:%M')}:"
 ```
 
+<span id="goto">
 ## goto
+</span>
 
 The `g` command in thread view mode looks for a URL in the line under
 the cursor, and if it finds one, it sends it to the goto hook.  The hook

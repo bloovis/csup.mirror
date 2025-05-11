@@ -2,22 +2,26 @@
 
 Csup supports the following kind of searches:
 
-* **Buffer** (the text as displayed on your screen, rather than the underlying message)
-* **By Label**
-* **By Content**
+* [In buffer](#buffer) (the text as displayed on your screen, rather than the underlying message)
+* [Quick Label](#by-label)
+* [Full (general)](#by-content)
 
 Csup translates its own search query language into the underlying
 [notmuch search query language](https://notmuchmail.org/searching/).  You can
 also mix notmuch search terms with Csup search terms.
 
+<span id="buffer">
 ## Buffer
+</span>
 
 Simply press the forward slash key `/` and type your text. This behavior similar to `vim`
 and other console apps you're already used to. Remember that this only searches the text
 *as displayed on screen*, so it's great for partial subject lines and summaries,
 but for email searches, you're probably more interested in the other options.
 
+<span id="by-label">
 ## By Label
+</span>
 
 Press `L` to do a quick label search. You will then be prompted for a label; hit <kbd>enter</kbd>
 to bring up scrollable list of all the labels you've ever used, along with some special labels
@@ -25,7 +29,9 @@ to bring up scrollable list of all the labels you've ever used, along with some 
 
 Highlight a label and press <kbd>enter</kbd> to view all the messages with that label.
 
+<span id="by-content">
 ## By Content
+</span>
 
 For a general search, press `F` or `\`. Now type in your query. You can just type in arbitrary text,
 which will be matched on a per-word basis against the bodies of all email in the index,
@@ -38,7 +44,9 @@ In other words: `three contiguous words` would be treated as `three OR contiguou
 any message containing any of those items, where `"three contiguous words"` would
 be treated as searching for that exact phrase.
 
-## Field Search
+<span id="field-search">
+<## Field Search
+</span>
 
 Specific message fields can be searched by using <field name\>:<query\>, e.g.: `label:ruby-talk`,
 or `from:matz@ruby-lang.org`. (Fields include: `body`, `from`, `to`, `subject`, `label`, and others.)

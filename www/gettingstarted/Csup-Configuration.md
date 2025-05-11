@@ -16,20 +16,20 @@ When you are asked whether you want dash to be the default shell, select "No".
 
 If you chose not to use a notmuch hook to fetch mail, you can
 create a Csup hook to do the same.
-See [Hooks](../advancedusage/Hooks.md)
+See the [before-poll hook](../advancedusage/Hooks.md#before-poll)
 for more information.
 
 ## Displaying MIME-encoded emails
 
 You can tell Csup how to display MIME-encoded emails through the use of a hook.
-See [Hooks](../advancedusage/Hooks.md)
+See the [mime-decode hook](../advancedusage/Hooks.md#mime-decode)
 for more information.
 
 ## Viewing MIME-encoded attachments
 
 You can tell Csup how to view MIME-encoded attachments (such as PDFs
 and images) through the use of a hook.
-See [Hooks](../advancedusage/Hooks.md)
+See the [mime-view hook](../advancedusage/Hooks.md#mime-view)
 for more information.
 
 ## Configuration files
