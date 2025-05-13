@@ -34,14 +34,14 @@ for more information.
 
 ## Configuration files
 
-Csup expects all of its configuration files to be located in the directory `~/.csup`.
-There are two configuration files:
+Csup expects all of its configuration files to be located in the `~/.csup` directory.
+There are three configuration files:
 
 * `config.yaml` (primary configuration file)
 * `colors.yaml`  (user interface color scheme)
 * `keymap.yaml` (user-defined key bindings)
 
-Additionally, csup will create several more files in the `~/.csup` in
+Additionally, csup will create several more files in the `~/.csup` directory in
 response to user commands:
 
 * `contacts.txt` (contacts list)
@@ -58,14 +58,14 @@ create it with default values.  The file is compatible with the Sup
 config file, but has some additional information that is
 specific to Csup.
 
-The keys in the config file can be symbols (names with a ':' prefix) for Sup compatibility,
+The keys in `config.yaml` can be symbols (names with a ':' prefix) for Sup compatibility,
 or ordinary names (without the ':' prefix).  But when Csup exits,
-it saves the config file using ordinary names for keys.
+it saves `config.yaml` using ordinary names for keys.
 
 ### Notmuch config options
 
 There are two new Notmuch-related configuration options that can
-be set in the config file:
+be set in `config.yaml`:
 
 * `sent_folder`: a string containing the name of the mail folder to be used to store sent emails.
   If not specified, the default is `sent`.
@@ -75,7 +75,7 @@ be set in the config file:
 ### Sending email
 
 Because Csup has its own SMTP client for sending email, the
-account section in the config file has additional information related
+account section in `config.yaml` has additional information related
 to the SMTP server for that account:
 
 * `smtp_server`: the SMTP server hostname
