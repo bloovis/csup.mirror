@@ -58,7 +58,7 @@ class Pipe
       p.input.close unless @input_closed
       p.output.close unless @output_closed
       p.error.close unless @error_closed
-      p.wait.exit_status
+      p.wait.exit_code
     else
       -1
     end

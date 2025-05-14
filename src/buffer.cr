@@ -293,7 +293,7 @@ class BufferManager
 
   alias AskBlock = Proc(String, Array(Tuple(String, String)))
 
-  def do_ask(domain : Symbol, question : String, block_given? = true,
+  def do_ask(domain : Symbol, question : String, block_given = true,
 	     default=nil, &block : AskBlock) : String?
     #STDERR.puts "ask: domain #{domain}, question '#{question}', default '#{default}'"
     raise "impossible!" if @asking
@@ -716,7 +716,7 @@ class BufferManager
     #Ncurses.mutex.unlock unless opts[:sync] == false
   end
 
-  def do_say(s : String, id = -1, block_given? = true, &b)
+  def do_say(s : String, id = -1, block_given = true, &b)
     new_id = id == -1
 
     #@minibuf_mutex.synchronize do
@@ -737,7 +737,7 @@ class BufferManager
       draw_minibuf(refresh: true)
     end
 
-    if block_given?
+    if block_given
       begin
         #puts "Yielding minibuf id #{id}"
         yield id
@@ -749,7 +749,7 @@ class BufferManager
     id
   end
 
-  # Crystal doesn't have block_given? or allow blocks to be optional, so
+  # Crystal doesn't have block_given or allow blocks to be optional, so
   # we provide two versions of say, one that requires a block
   # and one that doesn't.
   def self.say(s : String, id = -1)

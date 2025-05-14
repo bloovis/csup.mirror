@@ -27,12 +27,12 @@ class UndoManager
   end
 
   # Because Crystal doesn't have way to test for the existence of a block,
-  # like Ruby's block_given?, we provide two entry points for register: one that
+  # like Ruby's block_given, we provide two entry points for register: one that
   # takes a block and one that doesn't.
-  def do_register(desc : String, block_given? = true, *actions, &block : Action)
+  def do_register(desc : String, block_given = true, *actions, &block : Action)
     a = Array(Action).new
     actions.map {|action| a << action}
-    if block_given?
+    if block_given
       a << block
     end
     @actionlist.push({desc: desc, actions: a})

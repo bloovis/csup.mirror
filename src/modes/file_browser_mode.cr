@@ -81,7 +81,7 @@ class FileBrowserMode < LineCursorMode
     return unless f
 
     if File.directory?(f) && name != "./"
-      if File.readable?(f)
+      if File::Info.readable?(f)
         @dirs.push f
         reload
       else
