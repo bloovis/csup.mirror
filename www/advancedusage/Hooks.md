@@ -17,6 +17,12 @@ from dash to bash.  Run this command:
 
 When you are asked whether you want dash to be the default shell, select "No".
 
+On some systems, the above command will not work, so you'll have to change
+the symbolic link for the shell using these commands:
+
+    cd /bin
+    sudo ln -sf bash sh
+
 When Csup executes a hook, it passes any required parameters and data as one or more lines to
 the hook's standard input.  Csup then reads whatever the hook sends to its standard output,
 and uses that as the "value" of the hook.
