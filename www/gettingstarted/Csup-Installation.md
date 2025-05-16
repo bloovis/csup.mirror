@@ -9,11 +9,11 @@ Make sure you have the ncursesw packages installed.  On Debian/Ubuntu do this:
 
     sudo apt install libncursesw5 libncursesw5-dev
 
-Fetch the source code using:
+Fetch the source code repository and check it out in one step using:
 
-    git clone https://bionic.bloovis.com/cgit/csup
+    fossil clone https://www.bloovis.com/fossil/home/marka/fossils/csup
 
-Change to the csup directory and build it:
+Change to the `csup` directory and build it:
 
     cd csup
     shards install
