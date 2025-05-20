@@ -39,11 +39,16 @@ an exit status of 0; otherwise it should return a non-zero exit status.  If the 
 needs to show the user a message about what it did, it should write this message
 as a single line to standard output.
 
+If you have already defined a `pre-new` hook for Notmuch, you will probably
+want to have this hook do nothing but return a zero exit code.
+See [Notmuch Hook Setup](../gettingstarted/Notmuch.md#hooks) for
+more information about the Notmuch `pre-new` hook.
+
 Here is a sample `~/.csup/hooks/before-poll` hook:
 
 ```
 #!/bin/sh
-fetchmail >>/tmp/fetchmail.log
+#fetchmail >>/tmp/fetchmail.log  # Do nothing because we already have pre-new
 exit 0	# always return 0 because fetchmail returns non-zero if no messages
 ```
 

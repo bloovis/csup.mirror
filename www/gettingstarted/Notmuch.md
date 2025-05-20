@@ -85,7 +85,9 @@ read email on a device with no keyboard, a tiny screen, and a non-Linux operatin
 (i.e., a so-called "smart" phone). However, some users may want to use IMAP (and a tool like offlineimap),
 so that the mails stay on the server.
 
+<span id="hooks">
 ## notmuch hook setup
+</span>
 
 First, I created the directory `~/mail/.notmuch/hooks`.  In that directory,
 I created two scripts, `pre-new` and `post-new`, and marked them as
