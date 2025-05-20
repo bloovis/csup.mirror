@@ -26,8 +26,24 @@ global:
     - "C-w"
 ```
 
-## Display current bindings
+## Display Current Bindings
 
 To display all the current bindings (except for the ones using
 multiple keystrokes), use the `C-k` (Display keymaps) command
 in Csup.  You can use the resulting text as a template for `keymap.yaml`.
+
+## Key Names
+
+Key names in Csup differ from key names in Sup in that they are always
+strings:
+
+* Ordinary alphanumeric keys: "a" through "z", "A" through "Z", "0" through "9"
+* Control keys: "C-x" means holding down Ctrl while pressing x
+* Meta keys: "M-x" means holding down Alt while pressing x
+* Control Meta keys: "C-M-x" means holding down Ctrl and Alt while pressing x
+* Function keys: "F1" through "F20"
+* Timeout: "ERR"
+* Single mouse click: "click"
+* Double mouse click: "doubleclick"
+* Special commonly used keys: "Enter", "Tab", "Space", "Down", "Left", "Right", "PgUp", "PgDn", "Home", "End",
+"Insert", "Delete"
