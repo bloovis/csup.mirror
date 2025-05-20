@@ -45,7 +45,7 @@ any message containing any of those items, where `"three contiguous words"` woul
 be treated as searching for that exact phrase.
 
 <span id="field-search">
-<## Field Search
+## Field Search
 </span>
 
 Specific message fields can be searched by using <field name\>:<query\>, e.g.: `label:ruby-talk`,
