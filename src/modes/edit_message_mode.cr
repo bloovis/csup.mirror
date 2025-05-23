@@ -545,7 +545,7 @@ class EditMessageMode < LineCursorMode
   end
 
   def attach_file(*args)
-    fn = BufferManager.ask_for_filename :attachment, "File name (enter for browser): "
+    fn = BufferManager.ask_for_filename :attachment, "File name/wildcard (Enter for browser): "
     return unless fn
     begin
       Dir[fn].each do |f|
