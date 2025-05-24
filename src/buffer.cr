@@ -286,7 +286,7 @@ class BufferManager
   end
   singleton_method kill_buffer, buf
 
-  ## for simplicitly, we always place the question at the very bottom of the
+  ## for simplicity, we always place the question at the very bottom of the
   ## screen.
   # Crystal note: we don't use TextField or Ncurses forms, so ignore
   # then domain parameter, but allow it for compatibility with existing code.

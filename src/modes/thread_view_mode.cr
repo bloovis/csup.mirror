@@ -306,7 +306,7 @@ class ThreadViewMode < LineCursorMode
     prevm = nil
     return unless thread = @thread
 
-    # If any of the message in the thread is missing chunks, the thread
+    # If any of the messages in the thread is missing chunks, the thread
     # may have been reloaded without bodies when a reply was sent, causing
     # a poll (which forcibly reloads the thread cache without bodies).
     # If that is the case, try reloading the bodies now.
