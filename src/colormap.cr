@@ -216,13 +216,8 @@ class Colormap
     end
   end
 
-  # Eventually, the code for obtaining color_fn should be
-  # moved to lib/csup.rb.
   def load_user_colors
-    base_dir   = File.join(ENV["HOME"], ".csup")
-    color_fn   = File.join(base_dir, "colors.yaml")
-
-    yaml = File.open(color_fn) { |f| YAML.parse(f) }
+    yaml = File.open(@filename) { |f| YAML.parse(f) }
     colors = Hash(String, Hash(String, String | Array(String))).new
     h = yaml.as_h
     h.each do |k, v|
