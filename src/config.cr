@@ -6,7 +6,7 @@ module Redwood
 class Config
   singleton_class
 
-  alias Account = Hash(String, String)		# account settings (name, email, etc.)
+  alias Account = Hash(String, String | Array(String))		# account settings (name, email, etc.)
   alias Accounts = Hash(String, Account)	# account name => account settings
   alias ConfigEntry = String | Int32 | Bool | Array(String) | Accounts
   alias ConfigTable = Hash(String, ConfigEntry)
@@ -156,10 +156,13 @@ class Config
 	  acct = Account.new
 	  val1.each do |k2, v2|
 	    key2 = k2.as_s
-	    # Convert integer value to string; otherwise value must be a string.
+	    # Convert integer value to string; otherwise value must be a string or array of strings.
 	    i = v2.as_i?
 	    if i
 	      val2 = i.to_s
+	    elsif a = v2.as_a?
+	      val2 = [] of String
+	      a.each {|s| val2 << s.as_s }
 	    else
 	      val2 = v2.as_s
 	    end

@@ -14,21 +14,31 @@ class Account < Person
   property smtp_user : String
   property smtp_password : String
 
+  # Return a value from an account config hash as a string, or
+  # the empty string if the value isn't present.
+  def cfg_string(h : Config::Account, name : String)
+    if h[name]?
+      h[name].as(String)
+    else
+      ""
+    end
+  end
+
   def initialize(h : Config::Account)
     raise ArgumentError.new("no name for account") unless h["name"]?
     raise ArgumentError.new("no email for account") unless h["email"]?
     super h["name"], h["email"]
-    @sendmail = h["sendmail"]? || ""		# not used, but here for Sup compatibility
-    @signature = h["signature"]? || ""
-    @gpgkey = h["gpgkey"]? || ""
-    @smtp_server = h["smtp_server"]? || ""
-    if port = h["smtp_port"]?
-      @smtp_port = port.to_i
+    @sendmail = cfg_string(h, "sendmail")		# not used, but here for Sup compatibility
+    @signature = cfg_string(h, "signature")
+    @gpgkey = cfg_string(h, "gpgkey")
+    @smtp_server = cfg_string(h, "smtp_server")
+    if h["smtp_port"]?
+      @smtp_port = h["smtp_port"].as(String).to_i
     else
       @smtp_port = 0
     end
-    @smtp_user = h["smtp_user"]? || ""
-    @smtp_password = h["smtp_password"]? || ""
+    @smtp_user = cfg_string(h, "smtp_user")
+    @smtp_password = cfg_string(h, "smtp_password")
   end
 
   # Default sendmail command for bouncing mail,
@@ -89,9 +99,8 @@ class AccountManager
       {% end %}
       #[:name, :sendmail, :signature, :gpgkey].each { |k| hash[k] ||= @default_account.send(k) }
     end
-    # FIXME: what to do about alternates?  They don't fit into the definition
-    # of Config::Account
-    #hash["alternates"] ||= [] of String
+
+    hash["alternates"] ||= [] of String
     #fail "alternative emails are not an array: #{hash[:alternates]}" unless hash[:alternates].kind_of? Array
 
     #[:name, :signature].each { |x| hash[x] ? hash[x].fix_encoding! : nil }
@@ -104,11 +113,11 @@ class AccountManager
       @default_account = a
     end
 
-    #([hash[:email]] + hash[:alternates]).each do |email|
-    #  next if @email_map.member? email
-    #  @email_map[email] = a
-    #end
-    @email_map[hash["email"]] = a
+    ([hash["email"].as(String)] + hash["alternates"].as(Array(String))).each do |email|
+      #system("echo adding #{email} to email_map >>/tmp/csup.log")
+      next if @email_map.member? email
+      @email_map[email] = a
+    end
 
     #hash[:regexen].each do |re|
     #  @regexen[Regexp.new(re)] = a
