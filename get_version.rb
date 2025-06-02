@@ -16,8 +16,12 @@ def version
   p.close
 end
 
+def iso_date
+  Time.now.strftime("%Y-%m-%d")
+end
+
 File.open("version.cr", "w") do |f|
   f.puts "module Redwood"
-  f.puts "VERSION = \"#{version}\""
+  f.puts "VERSION = \"#{iso_date} #{version}\""
   f.puts "end"
 end
