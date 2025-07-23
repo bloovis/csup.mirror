@@ -1,5 +1,8 @@
 # Csup - a Crystal port of the Sup mail client that uses notmuch
 
+(*Note*: If you are reading this on Github, you can find the
+original Fossil repository [here](https://www.bloovis.com/fossil/home/marka/fossils/csup/home)).
+
 This is a port of the [Sup mail client](https://github.com/sup-heliotrope/sup)
 to [Crystal](https://crystal-lang.org/).
 I call it by the unoriginal and unpronounceable name Csup.
