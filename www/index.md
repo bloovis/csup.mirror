@@ -20,6 +20,12 @@ thread data in the background.
 * Csup is a single compiled binary, instead of a large collection of Ruby scripts, so it
 uses much less memory and is easier to deploy.
 
+To clone this repository:
+
+```
+fossil clone https://chiselapp.com/user/bloovis/repository/Csup Csup.fossil
+```
+
 ## What's Here
 
 * [Getting Started and Basic Configuration](gettingstarted/index.md)
