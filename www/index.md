@@ -23,7 +23,7 @@ uses much less memory and is easier to deploy.
 To clone this repository:
 
 ```
-fossil clone https://chiselapp.com/user/bloovis/repository/Csup Csup.fossil
+fossil clone https://www.bloovis.com/fossil/home/marka/fossils/csup
 ```
 
 ## What's Here
