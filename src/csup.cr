@@ -32,6 +32,13 @@ module Redwood
   def init_managers
     basedir = BASE_DIR
 
+    log_io = File.open(File.join(basedir, "log"), "a")
+    if log_io
+      logm = Logger.new
+      Logger.add_sink(log_io)
+      @@log_io = log_io
+    end
+
     cf = Config.new(File.join(basedir, "config.yaml"))
     cm = ContactManager.new(File.join(basedir, "contacts.txt"))
     bm = BufferManager.new
@@ -48,12 +55,6 @@ module Redwood
     dm = DraftManager.new(Config.str(:draft_folder) || "draft")
     tc = ThreadCache.new
 
-    log_io = File.open(File.join(basedir, "log"), "a")
-    if log_io
-      logm = Logger.new
-      Logger.add_sink(log_io)
-      @@log_io = log_io
-    end
   end
 
   def event_loop(keymap, &b)
