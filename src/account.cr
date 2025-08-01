@@ -13,6 +13,7 @@ class Account < Person
   property smtp_port : Int32
   property smtp_user : String
   property smtp_password : String
+  property reply_to : String
 
   # Return a value from an account config hash as a string, or
   # the empty string if the value isn't present.
@@ -39,6 +40,7 @@ class Account < Person
     end
     @smtp_user = cfg_string(h, "smtp_user")
     @smtp_password = cfg_string(h, "smtp_password")
+    @reply_to = cfg_string(h, "reply_to")
   end
 
   # Default sendmail command for bouncing mail,

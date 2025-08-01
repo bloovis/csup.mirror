@@ -721,6 +721,14 @@ class EditMessageMode < LineCursorMode
 	if addr = fix_email(from)
 	  email.from addr
 	end
+      when "Reply-to"
+	reply_to = v.as(String);
+        #STDERR.puts "build_message: reply-to #{reply_to}"
+	# If Reply-To is in format "name <addr>", split out the two parts.
+	if addr = fix_email(reply_to)
+	  email.reply_to addr
+	  #STDERR.puts "set reply_to to #{addr}"
+	end
       when "To"
         to = v.as(Array(String))
 	#STDERR.puts "setting To #{to}"
