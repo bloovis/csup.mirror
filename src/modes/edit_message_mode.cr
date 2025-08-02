@@ -226,9 +226,23 @@ class EditMessageMode < LineCursorMode
     if a = @account_selector
       #STDERR.puts "update: a.val = #{a.val}"
       if a.val == ""
-        @header["From"] = @account_user
+        email = @account_user
       else
-        @header["From"] = AccountManager.full_address_for(a.val).as(String)
+	email = a.val
+      end
+      acct = AccountManager.account_for(email)
+      if acct
+	from = Person.full_address(acct.name, email).as(String)
+	reply_to = acct.reply_to
+      else
+	from = email
+	reply_to = ""
+      end
+      header["From"] = from
+      if reply_to != ""
+	header["Reply-to"] = reply_to
+      else
+	header.delete("Reply-to")
       end
     end
 

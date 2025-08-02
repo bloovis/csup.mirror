@@ -35,12 +35,13 @@ class ReplyMode < EditMessageMode
     ## alias, we want to use that alias in the reply.
     if (b = (@m.to.map {|t| t.email} + @m.cc.map {|c| c.email} + [@m.recipient_email]).
              find { |p| p && AccountManager.is_account_email?(p) })
-      if a = AccountManager.account_for(b)
-        from = Person.new a.name, b
+      if from_account = AccountManager.account_for(b)
+        from = Person.new from_account.name, b
       end
     ## if all else fails, use the default
     else
-      from = AccountManager.default_account
+      from_account = AccountManager.default_account
+      from = from_account
     end
     unless from
       BufferManager.flash "Cannot determine From:!"
@@ -132,6 +133,9 @@ class ReplyMode < EditMessageMode
     h["In-reply-to"] = "<#{@m.id}>"
     h["Subject"] = Message.reify_subj(@m.subj)
     h["References"] = refs
+    if from_account && from_account.reply_to != ""
+      h["Reply-to"] = from_account.reply_to
+    end
     headers_full = h.merge @headers[@type_selector.val]
 
     #HookManager.run "before-edit", :header => headers_full, :body => body

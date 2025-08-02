@@ -18,9 +18,6 @@ class ComposeMode < EditMessageMode
     if to = opts.strarray(:to)
       header["To"] = to
     end
-    if reply_to = opts.str(:reply_to)
-      header["Reply-To"] = reply_to
-    end
     if cc = opts.strarray(:cc)
       header["Cc"] = cc
     end
@@ -55,9 +52,6 @@ class ComposeMode < EditMessageMode
 
     unless from = opts.str(:from)
       if acct = AccountManager.default_account
-	if acct.reply_to != ""
-	  newopts[:reply_to] = acct.reply_to
-	end
 	from = acct.email
 	question = "From (default #{from}): "
       else
