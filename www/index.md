@@ -16,7 +16,7 @@ There are some important differences between Csup and Sup-notmuch:
 * Csup does not have any asynchronous behavior.  For example, it will not load
 thread data in the background.
 * Crypto (GPG) support is entirely missing.
-* Csup has a built-in SMTP client for sending email.
+* Csup has built-in SMTP and SMTP2GO API clients for sending email.
 * Csup is a single compiled binary, instead of a large collection of Ruby scripts, so it
 uses much less memory and is easier to deploy.
 

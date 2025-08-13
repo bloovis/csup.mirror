@@ -72,7 +72,7 @@ be set in `config.yaml`:
 * `draft_folder`: a string containing the name of the mail folder to be used to store draft emails (i.e., composed but unsent emails)
   If not specified, the default is `draft`.
 
-### Sending email
+### Sending email via SMTP
 
 Because Csup has its own SMTP client for sending email, the
 account section in `config.yaml` has additional information related
@@ -83,6 +83,40 @@ to the SMTP server for that account:
 * `smtp_user`: the username to be supplied to the SMTP server (may be different from the
 user's email address)
 * `smtp_password`: the SMTP user's password
+
+Example:
+
+```
+accounts:
+  default:
+    name: Joe User
+    email: joeuser@example.com
+    signature: /home/joeuser/.signature
+    smtp_server: smtp.example.com
+    smtp_port: 587
+    smtp_user: joeuser@example.com
+    smtp_password: SmTpPaSsWoRd
+```
+
+### Sending email via SMTP2GO
+
+If your host is blocked from using SMTP (as is the case with many cloud
+VPS providers now), you can use the [SMTP2GO API](https://developers.smtp2go.com/docs/introduction-guide)
+to send email.  You don't need any of the `smtp_*` settings described above.
+Instead, add an `smtp2go_api_key` field containing your API key to the account
+section in `config.yaml`.  Example:
+
+```
+accounts:
+  apiuser:
+    name: API User
+    email: apiuser@example.com
+    signature: /home/apiuser/.signature
+    smtp2go_api_key: api-E49E262BF4C366CFFE5B9919F1B9E6CA
+```
+
+To ensure that SMTP2GO will accept your email, the `email` setting
+should be a verified sender.
 
 ### Confirm no attachments
 
@@ -159,6 +193,11 @@ accounts:
     smtp_port: 587
     smtp_user: joeuser@example.com
     smtp_password: SmTpPaSsWoRd
+  apiuser:
+    name: API User
+    email: apiuser@example.com
+    signature: /home/apiuser/.signature
+    smtp2go_api_key: api-E49E262BF4C366CFFE5B9919F1B9E6CA
 ```
 
 ## colors.yaml
