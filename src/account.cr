@@ -14,6 +14,7 @@ class Account < Person
   property smtp_user : String
   property smtp_password : String
   property reply_to : String
+  property smtp2go_api_key : String
 
   # Return a value from an account config hash as a string, or
   # the empty string if the value isn't present.
@@ -41,6 +42,7 @@ class Account < Person
     @smtp_user = cfg_string(h, "smtp_user")
     @smtp_password = cfg_string(h, "smtp_password")
     @reply_to = cfg_string(h, "reply_to")
+    @smtp2go_api_key = cfg_string(h, "smtp2go_api_key")
   end
 
   # Default sendmail command for bouncing mail,

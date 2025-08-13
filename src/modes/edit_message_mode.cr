@@ -99,6 +99,8 @@ class EditMessageMode < LineCursorMode
   property temp_files = Array(String).new
   property attachments = Array(Attachment).new
   property attachment_lines_offset = 0
+  property subject = ""
+  property full_body = ""
 
   property account_selector : HorizontalSelector?
   bool_getter edited
@@ -138,6 +140,7 @@ class EditMessageMode < LineCursorMode
 
     message_id = "#{Time.now.to_i}-csup-#{rand 10000}@#{hostname}"
     @message_id = "<#{message_id}>"
+    @subject = ""
     @edited = false
     @sig_edited = false
     @selectors = Array(HorizontalSelector).new
@@ -650,8 +653,8 @@ class EditMessageMode < LineCursorMode
       BufferManager.flash "No account for sending.  Unable to send!"
       return false
     end
-    if acct.smtp_server == ""
-      BufferManager.flash "Account does not define smtp_server.  Unable to send!"
+    if acct.smtp_server == "" && acct.smtp2go_api_key == ""
+      BufferManager.flash "Account does not define smtp_server or smtp2go_api_key.  Unable to send!"
       return false
     end
 
@@ -673,6 +676,10 @@ class EditMessageMode < LineCursorMode
     # Set up the SMTP client.
     config = EMail::Client::Config.new(acct.smtp_server, acct.smtp_port, helo_domain: "localhost")
     config.use_auth(acct.smtp_user, acct.smtp_password)
+    key = acct.smtp2go_api_key
+    if key != ""
+      config.smtp2go_api_key = key
+    end
     config.use_tls(EMail::Client::TLSMode::SMTPS)
     config.use_tls(EMail::Client::TLSMode::STARTTLS)
     config.client_name = "Csup"
@@ -683,11 +690,15 @@ class EditMessageMode < LineCursorMode
     success = false
     begin
       client.start do
-	success = send(m, override_message_id: false)
+        if key != ""
+	  success = send_smtp2go(m, @subject, @message_id, @full_body)
+	else
+	  success = send(m, override_message_id: false)
+	end
       end
     rescue e
       warn "Exception sending mail: #{e.message}"
-      BufferManager.flash "Problem sending mail: #{e.message}"
+      BufferManager.flash "Exception sending mail: #{e.message}"
       return false
     end
     unless success
@@ -768,7 +779,8 @@ class EditMessageMode < LineCursorMode
 	  end
 	end
       when "Subject"
-	email.subject(v.as(String))
+        @subject = v.as(String)
+	email.subject(@subject)
       when "Date"
         # Ignore the date header, use current time instead.
       when "Message-ID", "Message-Id", "Message-id", "Mime-version"
@@ -801,6 +813,7 @@ class EditMessageMode < LineCursorMode
     ## body must end in a newline or GPG signatures will be WRONG!
     body += "\n" unless body[-1] == '\n'
     email.message body
+    @full_body = body
 
     # Add the attachments.
     @attachments.each {|a| a.attach_to_email(email)}
