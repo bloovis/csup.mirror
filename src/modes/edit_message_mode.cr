@@ -691,7 +691,7 @@ class EditMessageMode < LineCursorMode
     begin
       client.start do
         if key != ""
-	  success = send_smtp2go(m, @subject, @message_id, @full_body)
+	  success = send_smtp2go(m)
 	else
 	  success = send(m, override_message_id: false)
 	end
