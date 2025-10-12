@@ -52,13 +52,15 @@ class FileDefs
     File.open(@filename) do |f|
       lineno = 1
       f.each_line do |line|
-	#puts "line 1: #{line.strip}"
-	if line =~ /^(\s*)class\s+(\w+)/
-	  add_class($2, $1.display_size(tabsize), lineno, $1.size, line.strip)
+	#puts "line #{lineno}: #{line.strip}"
+	if line =~ /^(\s*)(class|module|lib)\s+(\w+)/
+	  add_class($3, $1.display_size(tabsize), lineno, $1.size, line.strip)
 	elsif line =~ /^(\s*)def\s+(\w+)/
 	  add_method($2, $1.display_size(tabsize), lineno, $1.size, line.strip)
 	elsif line =~ /^(\s*)end(\s|$)/
 	  pop_defs($1.display_size(tabsize))
+	elsif line =~ /^(\s*)(fun|alias)\s+(\w+)/
+	  add_fun($3, lineno, $1.size, line.strip)
 	end
 	lineno += 1
       end
@@ -80,6 +82,11 @@ class FileDefs
     dprint "add_method: name #{name}, indent #{indent}, lineno #{lineno}"
     full_name = (class_stack.map {|d| d.name} + [name]).join(".")
     method_stack.push (Def.new(name, lineno, indent, context))
+    records.push (Def.new(full_name, lineno, column, context))
+  end
+
+  def add_fun(name : String, lineno : Int32, column : Int32, context : String)
+    full_name = (class_stack.map {|d| d.name} + [name]).join(".")
     records.push (Def.new(full_name, lineno, column, context))
   end
 
