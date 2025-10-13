@@ -257,6 +257,22 @@ class Index
     end
   end
 
+  def filesearch(name : String)
+    results = [] of String
+    fdefs.each do |filename, fdef|
+      if filename =~/#{name}/
+	results.push("#{filename} <unknown> 1 <unknown>")
+      end
+    end
+    total_results = results.size
+    if total_results > 0
+      STDOUT.puts "cscope: #{total_results} lines"
+      results.each {|s| STDOUT.puts s}
+    else
+      STDOUT.puts "no results"
+    end
+  end
+
   def line_interface
     while true
       STDOUT.print ">> "
@@ -272,6 +288,8 @@ class Index
         search(search_term, all_results: false)
       when '6'
 	grepsearch(search_term)
+      when '7'
+	filesearch(search_term)
       else
 	puts "Unknown search type #{search_type}"
       end
