@@ -13,14 +13,14 @@
 # "def" statement is the same as the indention for the matching "end" statement.
 # Furthermore, crscope does not attempt to find all uses of a particular symbol.
 #
-# The three search types that crscope implements are the ones used
-# by MicroEMACS:
+# The three search types that crscope implements are:
 #
 # 0 - Find all (possibly inexact) matches for a method.  Thus,
 #     searching for "print" will find "Class1.print", "Class2.print", etc.
 # 1 - Find exact match for a method.  This requires that you enter a
 #     fully-qualified name, where "." separates all class names.
 # 6 - Perform an egrep search.
+# 7 - Perform a file search.
 #
 # Crscope parses files you specify on the command line, or can
 # parse the files that you list in crscope.files.  It writes the
@@ -28,10 +28,16 @@
 
 require "option_parser"
 require "../src/pipe"
+require "../src/supcurses"
 
-# Provide a String method that gives the display length,
-# taking into account the display size of a tab.
+class Config
+  def self.bool(sym)
+    false
+  end
+end
+
 class String
+  # Calculate display length, taking into account the size of a tab.
   def display_size(tabsize = 8)
     len = 0
     self.each_char do |c|
@@ -42,6 +48,40 @@ class String
       end
     end
     len
+  end
+
+  # Return the common part of two strings.
+  def common(s : String)
+    len = [self.size, s.size].min
+    max = len
+    (0...len).each do |i|
+      if self[i] != s[i]
+        max = i
+	break
+      end
+    end
+    return self[0,max]
+  end
+
+  def pad_left(width : Int32)
+    pad = width - self.size
+    " " * pad + self
+  end
+
+  def pad_right(width : Int32)
+    pad = width - self.size
+    self + " " * pad
+  end
+end
+
+# Class used to record a single result of a search
+class Result
+  property filename : String
+  property name : String
+  property line : Int32
+  property context : String
+
+  def initialize(@filename, @name, @line, @context)
   end
 end
 
@@ -140,10 +180,111 @@ class FileDefs
   end
 end
 
+# Class defining a user entry fields in the form.
+class Entry
+  property prompt : String	# prompt string
+  property row : Int32		# line number on screen
+  property type : Int32		# 0, 1, 6, or 7
+  property buf : String		# entry buffer
+  property leftcol : Int32 	# starting column for entry
+  property fillcols : Int32	# number of columns to right of prompt
+
+  def initialize(@prompt, @row, @type)
+    @buf = ""
+    @leftcol = prompt.size + 1
+    @fillcols = Ncurses.cols - @leftcol
+    Ncurses.mvaddstr @row, 0, @prompt
+  end
+
+  # Get an entry, return the last character typed (Enter, Up, Down, or C-d)
+  # The passed-in completion proc takes a prefix and returns the longest
+  # possible suffix for that prefix.
+
+  alias CompletionProc = Proc(String)
+
+  def get_entry(&block : CompletionProc) : String
+    Ncurses.mvaddstr(@row, 0, @prompt)
+    Ncurses.move(@row, @leftcol)
+    Ncurses.clrtoeol
+    Ncurses.curs_set 1
+    Ncurses.refresh
+
+    pos = @buf.size
+    done = false
+    aborted = false
+    lastc = ""
+    while true
+      # Redraw the @buf buffer.
+      if @buf.size >= fillcols
+	# Answer is too big to fit on screen.  Just show the right portion that
+	# does fit.
+	Ncurses.mvaddstr(@row, @leftcol, @buf[@buf.size-fillcols..@buf.size-1])
+        Ncurses.move(@row, Ncurses.cols - 1)
+      else
+        Ncurses.mvaddstr(@row, @leftcol, @buf + (" " * (fillcols - @buf.size)))
+        Ncurses.move(@row, @leftcol + pos)
+      end
+      Ncurses.refresh
+
+      c = Ncurses.getkey
+      next if c == ""
+      case c
+      when "C-a"
+        pos = 0
+      when "C-e"
+        pos = @buf.size
+      when "Left", "C-b"
+        if pos > 0
+	  pos -= 1
+	end
+      when "Right", "C-f"
+        if pos < @buf.size
+	  pos += 1
+	end
+      when "C-h", "Delete"
+        if !(c == "C-h" && pos == 0)
+	  if c == "C-h"
+	    pos -= 1
+	  end
+	  left = (pos == 0) ? "" : @buf[0..pos-1]
+	  right = (pos >= @buf.size - 1) ? "" : @buf[pos+1..]
+	  @buf = left + right
+	end
+      when "C-k"
+        if pos == 0
+	  @buf = ""
+	else
+	  @buf = @buf[0..pos-1]
+	end
+      when "C-u"
+        @buf = ""
+	pos = 0
+      when "C-i"
+        if lastc == "C-i"
+	  return c
+	end
+        suffix = yield
+	@buf = @buf.insert(pos, suffix)
+	pos += suffix.size
+      when "C-m", "C-d", "Up", "Down", "C-g", "C-n", "C-p"
+        return c
+      else
+	if c.size == 1
+	  @buf = @buf.insert(pos, c)
+	  pos += 1
+	end
+      end
+      lastc = c
+    end
+  end
+end
+
 class Index
   property fdefs = Hash(String, FileDefs).new	# indexed by filelname
   property debug = false
   property tabsize = 8
+  property nrows = 0		# Ncurses.rows
+  property result_rows = 0 	# nrows - 7
 
   def initialize(@debug, @tabsize)
   end
@@ -199,34 +340,31 @@ class Index
     end
   end
 
-  def search(name : String, all_results = true)
-    primary_results = [] of String
-    secondary_results = [] of String
+  def search(name : String, exact_match = false, partial_match = false) : Array(Result)
+    primary_results = [] of Result
+    secondary_results = [] of Result
     fdefs.each do |filename, fdef|
       fdef.records.each do |r|
-        if r.name == name
-	  primary_results.push("#{filename} #{r.name} #{r.lineno} #{r.context}")
-	elsif all_results
+	if partial_match
+	  if r.name.starts_with?(name)
+	    primary_results.push(Result.new(filename, r.name, r.lineno,r.context))
+	  end
+        elsif exact_match && r.name == name
+	  primary_results.push(Result.new(filename, r.name, r.lineno,r.context))
+	else
 	  regexp = Regex.new("(^|\\.)#{name}$")
 	  match = regexp.match(r.name)
 	  if match
-	    secondary_results.push("#{filename} #{r.name} #{r.lineno} #{r.context}")
+	    secondary_results.push(Result.new(filename, r.name, r.lineno,r.context))
 	  end
 	end
       end
     end
-    total_results = primary_results.size + secondary_results.size
-    if total_results > 0
-      STDOUT.puts "cscope: #{total_results} lines"
-      primary_results.each {|s| STDOUT.puts s}
-      secondary_results.each {|s| STDOUT.puts s}
-    else
-      STDOUT.puts "no results"
-    end
+    return primary_results + secondary_results
   end
 
-  def grepsearch(name : String)
-    results = [] of String
+  def grepsearch(name : String) : Array(Result)
+    results = [] of Result
     # Get the list of filenames, either from crscope.files,
     # or from the filenames listed in crscope.out.
     if File.exists?("crscope.files")
@@ -242,35 +380,23 @@ class Index
 	    if s =~ /^(\d+):(.*)/
 	      lineno = $1.to_i
 	      context = $2
-	      results.push("#{filename} <unknown> #{lineno} #{context}")
+	      results.push(Result.new(filename, "<unknown>", lineno, context))
 	    end
 	  end
 	end
       end
     end
-    total_results = results.size
-    if total_results > 0
-      STDOUT.puts "cscope: #{total_results} lines"
-      results.each {|s| STDOUT.puts s}
-    else
-      STDOUT.puts "no results"
-    end
+    return results
   end
 
-  def filesearch(name : String)
-    results = [] of String
+  def filesearch(name : String) : Array(Result)
+    results = [] of Result
     fdefs.each do |filename, fdef|
       if filename =~/#{name}/
-	results.push("#{filename} <unknown> 1 <unknown>")
+	results.push(Result.new(filename, "<unknown>", 1, "<unknown>"))
       end
     end
-    total_results = results.size
-    if total_results > 0
-      STDOUT.puts "cscope: #{total_results} lines"
-      results.each {|s| STDOUT.puts s}
-    else
-      STDOUT.puts "no results"
-    end
+    return results
   end
 
   def line_interface
@@ -281,19 +407,161 @@ class Index
       return if line.nil?
       search_type = line[0]
       search_term = line[1..]
+      results = [] of Result
       case search_type
       when '0'
-        search(search_term, all_results: true)
+        results = search(search_term, exact_match: false)
       when '1'
-        search(search_term, all_results: false)
+        results = search(search_term, exact_match: true)
       when '6'
-	grepsearch(search_term)
+	results = grepsearch(search_term)
       when '7'
-	filesearch(search_term)
+	results = filesearch(search_term)
       else
 	puts "Unknown search type #{search_type}"
       end
+      if results.size > 0
+	STDOUT.puts "cscope: #{results.size} lines"
+	results.each do |r|
+	  STDOUT.puts "#{r.filename} #{r.name} #{r.line} #{r.context}"
+	end
+      else
+	STDOUT.puts "no results"
+      end
     end
+  end
+	
+  def show_results (results : Array(Result))
+    shown = [results.size, @result_rows - 2].min
+    Ncurses.move 0, 0
+    Ncurses.clrtoeol
+
+    # Calculate maximum lengths of files, names, and line numbers.
+    flen = "File".size
+    nlen = "Name".size
+    llen = "Line".size
+    shown.times do |i|
+      r = results[i]
+      flen = [flen, Path[r.filename].basename.size].max
+      nlen = [nlen, r.name.size].max
+      llen = [llen, r.line.to_s.size].max
+    end
+
+    # Display the header line
+    Ncurses.mvaddstr 0, 0,
+      "  " +
+      "File".pad_right(flen) + " " +
+      "Name".pad_right(nlen) + " " +
+      "Line".pad_right(llen)
+
+    # Display the results with fields padded nicely.
+    (0..@result_rows-1).each do |i|
+      Ncurses.move i + 1, 0
+      Ncurses.clrtoeol
+      if i < shown
+	r = results[i]
+	Ncurses.mvaddstr i + 1, 0,
+	  "#{i} " +
+	  "#{Path[r.filename].basename.pad_right(flen)} " +
+	  "#{r.name.pad_right(nlen)} " +
+	  "#{r.line.to_s.pad_left(llen)} " +
+	  "#{r.context}"
+      end
+    end
+  end
+
+  def entry_search(entry : Entry, partial_match = false)
+    results = [] of Result
+    s = entry.buf
+    case entry.type
+    when 0
+      results = search(s, exact_match: false, partial_match: partial_match)
+    when 1
+      results = search(s, exact_match: true, partial_match: partial_match)
+    when 6
+      results = grepsearch(s)
+    when 7
+      results = filesearch(s)
+    end
+    return results
+  end
+
+  def curses_interface
+    entries = [] of Entry
+    Redwood.start_cursing
+    @nrows = Ncurses.rows
+    @result_rows = nrows - 7
+    Ncurses.curs_set 1
+
+    # Add the four entry fields
+    row = @nrows - 6
+    entries.push Entry.new("Inexact name search:", row,   0)
+    entries.push Entry.new("Exact name search:",   row+1, 1)
+    entries.push Entry.new("Regexp search:",       row+2, 6)
+    entries.push Entry.new("File search:",         row+3, 7)
+
+    entry_number = 0
+    done = false
+    until done
+      entry = entries[entry_number]
+      c = entry.get_entry do
+        # User hit Tab, so try to do a completion.
+	# First, get all partial matches.
+	results = entry_search(entry, partial_match: true)
+	show_results(results)
+
+	# Find the longest possible match for the string entered so far.
+	s = entry.buf
+	prefix = s
+	suffix = ""
+	longest = s
+	if results.size > 0 && entry.type != 7
+	  longest = ""
+	  results.each do |r|
+	    name = r.name
+	    if name.starts_with?(prefix)
+	      if longest == ""
+		longest = name
+	      else
+		longest = longest.common(name)
+	      end
+	    end
+	  end
+	  #if prefix.size == 0
+	  #  suffix = ""
+	  #else
+	  #  suffix = longest[prefix.size..]
+	  #end
+	end
+	suffix
+      end # End of completion code.
+
+      # How we handle the entry depends on what the the user hit
+      # to end it.
+      # Tab - display partial matches
+      # Enter - display inexact or exact matches
+      
+      case c
+      when "C-d"
+	done = true
+      when "Down", "C-n"
+        if entry_number == entries.size - 1
+	  entry_number = 0
+	else
+	  entry_number += 1
+	end
+      when "Up", "C-p"
+        if entry_number == 0
+	  entry_number = entries.size - 1
+	else
+	  entry_number -= 1
+	end
+      when "C-m"
+	results = entry_search(entry, partial_match: false)
+	show_results(results)
+      end
+    end
+    Redwood.stop_cursing
   end
 	
 end
@@ -368,7 +636,9 @@ def main
       puts "crscope.out does not exist.  Run crscope without -l and -d to create it."
       exit 1
     end
-    index.line_interface if server
+    index.line_interface
+  else
+    index.curses_interface
   end
 end
 
