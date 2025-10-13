@@ -1,3 +1,31 @@
+# crscope - cscope-like cross-reference tool for Crystal
+#
+# I've used cscope for decades to examine C source trees.  I also added
+# commands to my MicroEMACS editor to use cscope without leaving
+# the editor.  This program implements a subset of the cscope features,
+# but for Crystal source trees.  Because MicroEMACS only needs the
+# line-oriented interface of cscope, that's the only interface I
+# implemented for crscope.
+#
+# Also, due to the difficulty of parsing Crystal, crscope uses very crude
+# heuristics for locating the definitions of methods, class, modules, libraries,
+# and constants.  For example, it assumes that the indention of a "class" or
+# "def" statement is the same as the indention for the matching "end" statement.
+# Furthermore, crscope does not attempt to find all uses of a particular symbol.
+#
+# The three search types that crscope implements are the ones used
+# by MicroEMACS:
+#
+# 0 - Find all (possibly inexact) matches for a method.  Thus,
+#     searching for "print" will find "Class1.print", "Class2.print", etc.
+# 1 - Find exact match for a method.  This requires that you enter a
+#     fully-qualified name, where "." separates all class names.
+# 6 - Perform an egrep search.
+#
+# Crscope parses files you specify on the command line, or can
+# parse the files that you list in crscope.files.  It writes the
+# results of its parsing to crscope.out, which is plain-text file.
+
 require "option_parser"
 require "../src/pipe"
 
@@ -60,7 +88,9 @@ class FileDefs
 	elsif line =~ /^(\s*)end(\s|$)/
 	  pop_defs($1.display_size(tabsize))
 	elsif line =~ /^(\s*)(fun|alias)\s+(\w+)/
-	  add_fun($3, lineno, $1.size, line.strip)
+	  add_fun($3, lineno, $1.display_size(tabsize), line.strip)
+	elsif line =~ /^(\s*)([A-Z_]+)\s*=/
+	  add_fun($2, lineno, $1.display_size(tabsize), line.strip)
 	end
 	lineno += 1
       end
