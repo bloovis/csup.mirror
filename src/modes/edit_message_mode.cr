@@ -584,7 +584,7 @@ class EditMessageMode < LineCursorMode
     end
   end
 
-  # Run the editor on the email message file.  Return true if the use changed the file.
+  # Run the editor on the email message file.  Return true if the user changed the file.
   def start_edit(command : String, filepath : String, is_gui : Bool, old_from : String)
     mtime = File.mtime filepath
 

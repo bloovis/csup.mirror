@@ -123,8 +123,8 @@ class FileDefs
 	#puts "line #{lineno}: #{line.strip}"
 	if line =~ /^(\s*)(class|module|lib)\s+(\w+)/
 	  add_class($3, $1.display_size(tabsize), lineno, $1.size, line.strip)
-	elsif line =~ /^(\s*)def\s+(\w+)/
-	  add_method($2, $1.display_size(tabsize), lineno, $1.size, line.strip)
+	elsif line =~ /^(\s*)def\s+(self\.)?(\w+)/
+	  add_method($3, $1.display_size(tabsize), lineno, $1.size, line.strip)
 	elsif line =~ /^(\s*)end(\s|$)/
 	  pop_defs($1.display_size(tabsize))
 	elsif line =~ /^(\s*)(fun|alias)\s+(\w+)/
@@ -431,8 +431,21 @@ class Index
     end
   end
 	
-  def show_results (results : Array(Result))
-    shown = [results.size, @result_rows - 2].min
+  def char_for(n : Int32) : String
+    if n < 10
+      return ('0' + n).to_s
+    elsif n < 36
+      return ('a' + (n - 10)).to_s
+    else
+      return ('A' + (n - 36)).to_s
+    end
+  end
+
+  # Display results, and return the number actually shown.
+  # Eventually we have to allow for an offset, when
+  # there are more results than will fit on the screen.
+  def show_results (results : Array(Result)) : Int32
+    shown = [results.size, @result_rows - 2, 62].min
     Ncurses.move 0, 0
     Ncurses.clrtoeol
 
@@ -461,16 +474,17 @@ class Index
       if i < shown
 	r = results[i]
 	Ncurses.mvaddstr i + 1, 0,
-	  "#{i} " +
+	  "#{char_for(i)} " +
 	  "#{Path[r.filename].basename.pad_right(flen)} " +
 	  "#{r.name.pad_right(nlen)} " +
 	  "#{r.line.to_s.pad_left(llen)} " +
 	  "#{r.context}"
       end
     end
+    return shown
   end
 
-  def entry_search(entry : Entry, partial_match = false)
+  def entry_search(entry : Entry, partial_match = false) : Array(Result)
     results = [] of Result
     s = entry.buf
     case entry.type
@@ -484,6 +498,66 @@ class Index
       results = filesearch(s)
     end
     return results
+  end
+
+  def run_editor(filename : String, line : Int32)
+    editor = ENV["EDITOR"]?
+    if editor
+      command = "#{editor} #{filename}:#{line}"
+      Ncurses.endwin
+      success = system command
+      Ncurses.stdscr.keypad true
+      Ncurses.refresh
+      Ncurses.curs_set 1
+      #Ncurses.mvaddstr 0, 0, "Editor returned #{success}"
+    else
+      Ncurses.mvaddstr 0, 0, "Environment variable EDITOR not defined!"
+      Ncurses.clrtoeol
+    end
+  end
+
+  # Move the cursor to the results at the top of the screen
+  # and allow the user to select a result, which will
+  # invoke $EDITOR on the selected file and line.
+  # Return the last key entered by the user (C-d or C-i).
+  def move_to_results(results : Array(Result)) : String
+    shown = show_results(results)
+    done = false
+    i = 0
+    c = ""
+    until done
+      Ncurses.move i + 1, 0
+      c = Ncurses.getkey
+      next if c == ""
+      case c
+      when "C-m"
+        run_editor(results[i].filename, results[i].line)
+      when "Down", "C-n"
+	if i == shown - 1
+	  i = 0
+	else
+	  i += 1
+	end
+      when "C-d", "C-i"
+        done = true
+      else
+	if c.size == 1
+	  ch = c[0]
+	  n = -1
+	  if ch >= '0' && ch <= '9'
+	    n = ch - '0'
+	  elsif ch >= 'a' && ch <= 'z'
+	    n = ch - 'a' + 10
+	  elsif ch >= 'A' && ch <= 'Z'
+	    n = ch - 'A' + 36
+	  end
+	  if n != -1 && n < shown
+	    run_editor(results[n].filename, results[n].line)
+	  end
+	end
+      end
+    end
+    return c
   end
 
   def curses_interface
@@ -540,7 +614,6 @@ class Index
       # to end it.
       # Tab - display partial matches
       # Enter - display inexact or exact matches
-      
       case c
       when "C-d"
 	done = true
@@ -557,8 +630,14 @@ class Index
 	  entry_number -= 1
 	end
       when "C-m"
+        # Show the results, and move the cursor to the results
+	# so that the user can select one.  The user may
+	# also choose to exit selection mode with Tab or C-d.
 	results = entry_search(entry, partial_match: false)
-	show_results(results)
+	c = move_to_results(results)
+	if c == "C-d"
+	  done = true
+	end
       end
     end
     Redwood.stop_cursing
