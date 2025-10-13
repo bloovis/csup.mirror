@@ -31,3 +31,15 @@ fossil clone https://www.bloovis.com/fossil/home/marka/fossils/csup
 * [Getting Started and Basic Configuration](gettingstarted/index.md)
 * [Advanced Usage](advancedusage/index.md)
 * [Developer Notes](developernotes/index.md)
+
+
+## Crscope
+
+This repository also includes crscope, a partial reimplementation of cscope,
+but for Crystal files.  It has only the features I needed for use in
+my MicroEMACS variant: the ability to find the definitions of methods,
+classes, modules, and constants.  It uses rough heuristics to find
+these things, and doesn't attempt to do a full parse or to find
+all uses of a symbol.  Built it using:
+
+    make crscope
