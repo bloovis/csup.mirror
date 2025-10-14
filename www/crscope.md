@@ -20,10 +20,18 @@ and assumptions about the indentation of blocks.  In particular, the indentation
 in the case of one-liner class and method definitions, with `end` on
 the same line.
 
-Crscope can also search for files, using a partial match of the term you enter, and
+Like cscope, crscope can also search for files, using a partial match of the term you enter, and
 can also search using regular expressions.
 
-Crscope has two features that are missing in cscope:
+Crscope attempts to define method and class names using a qualified
+syntax of the form `Class1.Class2[...].MethodName`, where nested
+classes are separated with periods.  This is slightly different from
+the scoping syntax used in Crystal, but it allows for a consistent and
+simple naming scheme.
+
+## New features
+
+Crscope has several features that are missing in cscope:
 
 * **Completions**:  If you
 press ?  while entering a search field, crscope will display a list of
@@ -36,37 +44,71 @@ search fields, such as `C-a` for beginning of line, `C-e` for end of line, etc.
 The entry fields are persistent, and won't be erased if you hit Enter to
 do a search, which allows you to edit them after a search.
 
+* **Go forward and back in search results**.  In cscope, you could only
+go forward in the search results by hitting Space.  In crscope, you can also
+go back by hitting Backspace.
+
+## Curses-based interface
+
 Aside from completions and search field editing, the default curses-based user interface is
 as close to cscope as possible, including key bindings and
 display format.
 
-Crscope also has a line-oriented mode that is identical to cscope's, but with
+The screen is divided into two sections: a large top section that contains
+the search results, and a smaller bottom section that contains the search
+entry fields.  Switch between the two sections using the Tab (`C-i`) key.
+In each section, you can move from one line to another using
+the Down, Up, `C-n`, and `C-p` keys.
+
+In the search result section, hit the Enter key to run your editor on
+the selected file and jump to the selected line number. 
+
+In the search entry fields, you can use Emacs-style editing keys.  Hit
+the ? key to show possible completions.  Hit Enter to perform a search.
+
+There are four search entry fields:
+
+* **Inexact name search**: Use this to find a name without having to specify
+  its class or module qualifications.  For example, search for `initialize`
+  to find all methods called `initialize`, regardless of enclosing class.
+* **Exact name search**: Use this to find a fully-qualified name.  For example,
+  search for `Class1.initialize` to find the `initialize` method in the
+  class `Class1`.
+* **Regexp search**: Use this to perform an egrep (grep -E) search.  This
+  is useful for finding all occurrences of a particular method, since
+  crscope doesn't do that in its name searches.
+* **File search**: Use this to search for all filenames containing the specified string.
+  This is handy if you can't remember the exact name or full path for a particular file.
+
+Press `C-d` (Control-D) to quit.
+
+## Line-oriented interface
+
+Crscope has a line-oriented mode whose interface is identical to cscope's, but with
 a limited set of search types.  Start the line-oriented mode with the `-l` option.
 This mode is used by MicroEMACS, and it could possibly be used other editors
-that I'm not aware of that have cscope integration.  This mode implements only the following search types:
+that have cscope integration.  This mode implements only the following search types:
 
 * 0 - non-exact name search (partially-qualified or unqualified names)
 * 1 - exact name search (fully-qualified names)
 * 6 - regular expression search
 * 7 - file search
 
-Crscope attempts to define method and class names using a qualified
-syntax of the form `Class1.Class2[...].MethodName`, where nested
-classes are separated with periods.  This is slightly different from
-the scoping syntax used in Crystal, but it allows for a consistent and
-simple naming scheme.
+## Files
 
 Crscope uses two files:
 
-* The optional file `crscope.files`, which contains a
+* `crscope.files`: an optional file that contains a
   list of files to search.  If this file doesn't exist, crscope will parse the
   files you specify on the command line.  Unlike cscope, crscope will
   not automatically search files in the current directory if you don't
   specify any files on the command line or in `crscope.files`.
-* Crscope writes the result of its file parsing
-  to `crscope.out`, which is a plain text file that can be edited if
+* `crscope.out`: the file that crscope creates to save the result of its file parsing.
+  It is a plain text file that you can edit if
   necessary.  Use the `-d` option to prevent crscope from rebuilding
   this file at startup.
+
+## Environment Variables
 
 Crscope uses the following environment variables:
 
@@ -81,6 +123,10 @@ Crscope uses the following environment variables:
 * If `CRSCOPE_EDITOR` is not defined, crscope uses the format string
   "`%e +%l %f`".
 
+## Build
+
 Build crscope using:
 
     make crscope
+
+Then copy the binary to some place in your PATH.

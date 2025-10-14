@@ -548,7 +548,7 @@ class Index
 	shown = show_results(results, offset)
 	reload = false
 	more = results.size - (offset + shown)
-	if more > 0
+	if results.size > @result_rows - 2
 	  Ncurses.mvaddstr @result_rows, 0,
 	    "* Lines #{offset + 1}-#{offset + shown} of #{results.size}, " +
 	    "#{more} more - press Space to go forward, Backspace to go back *"
