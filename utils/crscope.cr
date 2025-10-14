@@ -154,7 +154,7 @@ class FileDefs
 
   def add_class(name : String, indent : Int32, lineno : Int32, column : Int32,
 		context : String, one_line = false)
-    dprint "add_class: name #{name}, indent #{indent}, lineno #{lineno}"
+    dprint "add_class: name #{name}, indent #{indent}, lineno #{lineno}, one_line #{one_line}"
     full_name = (class_stack.map {|d| d.name} + [name]).join(".")
     unless one_line
       class_stack.push (Def.new(name, lineno, indent, context))
@@ -176,7 +176,7 @@ class FileDefs
 
   def pop_defs(indent : Int32)
     dprint "pop_defs: indent #{indent}"
-    while class_stack.size > 0 && indent <= class_stack[-1].indent
+    if class_stack.size > 0 && indent <= class_stack[-1].indent
       d = class_stack.pop
       dprint "Popped class #{d.name}"
     end
@@ -628,6 +628,9 @@ class Index
 	# First, get all partial matches.
 	results = entry_search(entry, partial_match: true)
 	show_results(results, 0)
+	if results.size == 0
+	  Ncurses.mvaddstr 0, 0, "Could not find #{entry.buf}"
+	end
 
 	# Find the longest possible match for the string entered so far.
 	s = entry.buf
@@ -745,7 +748,10 @@ def main
     parser.on(
       "-h",
       "--help",
-      "Show this help") { puts parser }
+      "Show this help") do
+        STDERR.puts parser
+	exit 0
+      end
     parser.invalid_option do |flag|
       STDERR.puts "ERROR: #{flag} is not a valid option."
       STDERR.puts parser
