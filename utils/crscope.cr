@@ -259,14 +259,13 @@ class Entry
       when "C-u"
         @buf = ""
 	pos = 0
-      when "C-i"
-        if lastc == "C-i"
-	  return c
+      when "?"
+        if @type != 6
+	  suffix = yield
+	  @buf = @buf.insert(pos, suffix)
+	  pos += suffix.size
 	end
-        suffix = yield
-	@buf = @buf.insert(pos, suffix)
-	pos += suffix.size
-      when "C-m", "C-d", "Up", "Down", "C-g", "C-n", "C-p"
+      when "C-m", "C-d", "Up", "Down", "C-g", "C-n", "C-p", "C-i"
         return c
       else
 	if c.size == 1
@@ -560,6 +559,12 @@ class Index
 	else
 	  i += 1
 	end
+      when "Up", "C-p"
+	if i == 0
+	  i = shown - 1
+	else
+	  i -= 1
+	end
       when "C-d", "C-i"
 	done = true
       else
@@ -598,10 +603,11 @@ class Index
 
     entry_number = 0
     done = false
+    results = [] of Result
     until done
       entry = entries[entry_number]
       c = entry.get_entry do
-        # User hit Tab, so try to do a completion.
+        # User hit ?, so try to do a completion.
 	# First, get all partial matches.
 	results = entry_search(entry, partial_match: true)
 	show_results(results, 0)
@@ -656,14 +662,27 @@ class Index
 	# so that the user can select one.  The user may
 	# also choose to exit selection mode with Tab or C-d.
 	results = entry_search(entry, partial_match: false)
-	c = move_to_results(results)
-	if c == "C-d"
-	  done = true
+	show_results(results, 0)
+	if results.size > 0
+	  c = move_to_results(results)
+	  if c == "C-d"
+	    done = true
+	  end
+	else
+	  Ncurses.mvaddstr 0, 0, "Could not find #{entry.buf}"
 	end
-      end
-    end
+      when "C-i"
+        if results.size > 0
+	  c = move_to_results(results)
+	  if c == "C-d"
+	    done = true
+	  end
+	end
+      end # case
+
+    end # until done
     Redwood.stop_cursing
-  end
+  end # curses_interface
 	
 end
 
