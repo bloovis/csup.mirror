@@ -444,8 +444,8 @@ class Index
   # Display results, and return the number actually shown.
   # Eventually we have to allow for an offset, when
   # there are more results than will fit on the screen.
-  def show_results (results : Array(Result)) : Int32
-    shown = [results.size, @result_rows - 2, 62].min
+  def show_results (results : Array(Result), offset : Int32) : Int32
+    shown = [results.size - offset, @result_rows - 2, 62].min
     Ncurses.move 0, 0
     Ncurses.clrtoeol
 
@@ -454,7 +454,7 @@ class Index
     nlen = "Name".size
     llen = "Line".size
     shown.times do |i|
-      r = results[i]
+      r = results[i + offset]
       flen = [flen, Path[r.filename].basename.size].max
       nlen = [nlen, r.name.size].max
       llen = [llen, r.line.to_s.size].max
@@ -472,7 +472,7 @@ class Index
       Ncurses.move i + 1, 0
       Ncurses.clrtoeol
       if i < shown
-	r = results[i]
+	r = results[i + offset]
 	Ncurses.mvaddstr i + 1, 0,
 	  "#{char_for(i)} " +
 	  "#{Path[r.filename].basename.pad_right(flen)} " +
@@ -521,17 +521,39 @@ class Index
   # invoke $EDITOR on the selected file and line.
   # Return the last key entered by the user (C-d or C-i).
   def move_to_results(results : Array(Result)) : String
-    shown = show_results(results)
     done = false
-    i = 0
+    offset = 0
     c = ""
+    i = 0
+    shown = 0
+    reload = true
     until done
+      if reload
+	shown = show_results(results, offset)
+	reload = false
+	more = results.size - (offset + shown)
+	if more > 0
+	  Ncurses.mvaddstr @result_rows, 0,
+	    "* Lines #{offset + 1}-#{offset + shown} of #{results.size}, " +
+	    "#{more} more - press Space to go forward, Backspace to go back *"
+	end
+      end
       Ncurses.move i + 1, 0
       c = Ncurses.getkey
       next if c == ""
       case c
+      when " "
+        offset += shown
+	if offset < results.size
+	  reload = true
+	end
+      when "C-h"
+        if offset > 0
+	  offset = [offset - @result_rows, 0].max
+	  reload = true
+	end
       when "C-m"
-        run_editor(results[i].filename, results[i].line)
+	run_editor(results[i + offset].filename, results[i + offset].line)
       when "Down", "C-n"
 	if i == shown - 1
 	  i = 0
@@ -539,7 +561,7 @@ class Index
 	  i += 1
 	end
       when "C-d", "C-i"
-        done = true
+	done = true
       else
 	if c.size == 1
 	  ch = c[0]
@@ -552,7 +574,7 @@ class Index
 	    n = ch - 'A' + 36
 	  end
 	  if n != -1 && n < shown
-	    run_editor(results[n].filename, results[n].line)
+	    run_editor(results[n + offset].filename, results[n + offset].line)
 	  end
 	end
       end
@@ -582,7 +604,7 @@ class Index
         # User hit Tab, so try to do a completion.
 	# First, get all partial matches.
 	results = entry_search(entry, partial_match: true)
-	show_results(results)
+	show_results(results, 0)
 
 	# Find the longest possible match for the string entered so far.
 	s = entry.buf
