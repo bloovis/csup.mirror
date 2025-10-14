@@ -514,9 +514,12 @@ class Index
   end
 
   def run_editor(filename : String, line : Int32)
-    editor = ENV["EDITOR"]?
+    editor = ENV["EDITOR"]? || ENV["VISUAL"]? || "nano"
     if editor
-      command = "#{editor} #{filename}:#{line}"
+      format = ENV["CRSCOPE_EDITOR"]? || "%e +%l %f"
+      command = format.gsub("%e", editor).
+		       gsub("%l", line).
+		       gsub("%f", filename)
       Ncurses.endwin
       success = system command
       Ncurses.stdscr.keypad true

@@ -88,6 +88,19 @@ Crscope uses two files:
   necessary.  Use the `-d` option to prevent crscope from rebuilding
   this file at startup.
 
+Crscope uses the following environment variables:
+
+* `EDITOR` contains the name of the editor.
+* `VISUAL` contains the name of the editor if `EDITOR` is not defined.
+* `CRSCOPE_EDITOR` contains the format string that crscope uses to
+  construct the editor command line.  In this string, use the following
+  format specifiers:
+  - `%e` is replaced by the editor name
+  - `%l` is replaced by the line number
+  - `%f` is replaced by the filename 
+* If `CRSCOPE_EDITOR` is not defined, crscope uses the format string
+  "`%e +%l %f`".
+
 Build crscope using:
 
     make crscope
