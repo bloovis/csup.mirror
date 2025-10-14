@@ -1,6 +1,6 @@
 # Csup User Guide
 
-## What Is This?
+## Introduction to Csup
 
 Csup is a terminal-based email client for Linux,
 written in [Crystal](https://crystal-lang.org/).  It is a partial port of
@@ -26,20 +26,68 @@ To clone this repository:
 fossil clone https://www.bloovis.com/fossil/home/marka/fossils/csup
 ```
 
-## What's Here
+## More Information About Csup
 
 * [Getting Started and Basic Configuration](gettingstarted/index.md)
 * [Advanced Usage](advancedusage/index.md)
 * [Developer Notes](developernotes/index.md)
 
 
-## Crscope
+# Crscope
 
-This repository also includes crscope, a partial reimplementation of cscope,
-but for Crystal files.  It has only the features I needed for use in
-my MicroEMACS variant: the ability to find the definitions of methods,
-classes, modules, and constants.  It uses rough heuristics to find
-these things, and doesn't attempt to do a full parse or to find
-all uses of a symbol.  Built it using:
+This repository also includes crscope, a source code browsing tool
+for Crystal.  It is partial reimplementation of
+[cscope](https://cscope.sourceforge.net/), the venerable source code browing tool for C.
+
+Crscope has only the features I needed for use in
+my MicroEMACS variant: the ability to find the definitions of:
+
+* methods
+* classes
+* modules
+* constants
+
+Crscope uses rough heuristics to find these things, and doesn't attempt to do a full parse or to find
+all uses of a symbol.
+
+Crscope can also search for files, using a partial match of the term you enter, and
+can also search using regular expressions.
+
+Crscope has a completion feature that is missing in cscope.  If you
+press ?  while entering a search term, crscope will display a list of
+possible names, and will also insert as many characters as necessary
+to give the longest possible match.
+
+Aside from completions, the default curses-based user interface is
+nearly as identical to cscope as possible, including key bindings and
+display.
+
+Crscope also has line-oriented mode that is identical to cscope's, but with
+a limited set of search types.  Start the line-oriented mode with the `-l` option.
+This mode is used by MicroEMACS, and it could possibly be used other editors
+that I'm not aware of that have cscope integration.  This mode implements only the following search types:
+
+* 0 - non-exact name search
+* 1 - exact name search (i.e, you must enter a fully qualified name)
+* 6 - regular expression search
+* 7 - file search
+
+Crscope attempts to define method and class names using a qualified
+syntax of the form `Class1.Class2[...].MethodName`, where nested
+classes are separated with periods.  This is slightly different from
+the scoping syntax used in Crystal, but it allows for a consistent and
+simple naming scheme.
+
+Crscope uses two files:
+
+* The optional file `crscope.files`, which contains a
+  list of files to search.  If this file doesn't exist, crscope will parse the
+  files you specify on the command line.
+* Crscope writes the result of its file parsing
+  to `crscope.out`, which is a plain text file that can be edited if
+  necessary.  Use the `-d` option to prevent crscope from rebuilding
+  this file at startup.
+
+Build crscope using:
 
     make crscope
