@@ -119,10 +119,21 @@ class FileDefs
     dprint "FileDefs.parse_file: filename #{@filename}, tabsize #{@tabsize}"
     File.open(@filename) do |f|
       lineno = 1
-      f.each_line do |line|
+      f.each_line(chomp: true) do |line|
 	#puts "line #{lineno}: #{line.strip}"
-	if line =~ /^(\s*)(class|module|lib)\s+(\w+)/
-	  add_class($3, $1.display_size(tabsize), lineno, $1.size, line.strip)
+	# Handle the following unusual cases:
+	# - one-line class (e.g. Class Blotz ; ... ; end)
+	# - double-colon qualified class (e.g. class Blotz::Blivot):
+	#   replace the :: with .
+	if line =~ /^(\s*)(class|module|lib)\s+([\w:]+)/
+	  space = $1
+	  name = $3.gsub("::", ".")
+	  one_line = false
+	  if line =~ /;\s*end\s*$/
+	    one_line = true
+	  end
+	  add_class(name, space.display_size(tabsize), lineno, space.size, line.strip,
+		    one_line)
 	elsif line =~ /^(\s*)def\s+(self\.)?(\w+)/
 	  add_method($3, $1.display_size(tabsize), lineno, $1.size, line.strip)
 	elsif line =~ /^(\s*)end(\s|$)/
@@ -141,10 +152,13 @@ class FileDefs
     puts s if @debug
   end
 
-  def add_class(name : String, indent : Int32, lineno : Int32, column : Int32, context : String)
+  def add_class(name : String, indent : Int32, lineno : Int32, column : Int32,
+		context : String, one_line = false)
     dprint "add_class: name #{name}, indent #{indent}, lineno #{lineno}"
     full_name = (class_stack.map {|d| d.name} + [name]).join(".")
-    class_stack.push (Def.new(name, lineno, indent, context))
+    unless one_line
+      class_stack.push (Def.new(name, lineno, indent, context))
+    end
     records.push (Def.new(full_name, lineno, column, context))
   end
 
