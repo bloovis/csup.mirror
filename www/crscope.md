@@ -60,8 +60,9 @@ entry fields.  Switch between the two sections using the Tab (`C-i`) key.
 In each section, you can move from one line to another using
 the Down, Up, `C-n`, and `C-p` keys.
 
-In the search result section, hit the Enter key to run your editor on
-the selected file and jump to the selected line number. 
+In the search results section, hit the Enter key to run your editor on
+the selected file and jump to the selected line number.  You can also
+type the letter shown on the left column to edit that file and line.
 
 In the search entry fields, you can use Emacs-style editing keys.  Hit
 the ? key to show possible completions.  Hit Enter to perform a search.
