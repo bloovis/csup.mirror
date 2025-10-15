@@ -74,7 +74,7 @@ class String
   end
 end
 
-# Class used to record a single result of a search
+# Class used to record a single result of a search.
 class Result
   property filename : String
   property name : String
@@ -85,7 +85,7 @@ class Result
   end
 end
 
-# Class used to record all name defintions for a single file.
+# Class used to record all name definitions for a single file.
 class FileDefs
 
   # Class used to record a name definition.
@@ -102,9 +102,8 @@ class FileDefs
 
   property filename = ""
 
-  # Ephemeral stacks of definitions used only during parsing.
+  # Ephemeral stack of modules and classes, used only during parsing.
   property class_stack = [] of Def
-  property method_stack = [] of Def
 
   # Permanent record of defintions, using fully qualified names.
   property records = [] of Def
@@ -134,14 +133,23 @@ class FileDefs
 	  end
 	  add_class(name, space.display_size(tabsize), lineno, space.size, line.strip,
 		    one_line)
+	elsif line =~ /^(\s*)abstract\s*class\s+([\w:]+)/
+	  space = $1
+	  name = $2.gsub("::", ".")
+	  one_line = false
+	  if line =~ /;\s*end\s*$/
+	    one_line = true
+	  end
+	  add_class(name, space.display_size(tabsize), lineno, space.size, line.strip,
+		    one_line)
 	elsif line =~ /^(\s*)def\s+(self\.)?(\w+)/
 	  add_method($3, $1.display_size(tabsize), lineno, $1.size, line.strip)
 	elsif line =~ /^(\s*)end(\s|$)/
 	  pop_defs($1.display_size(tabsize))
 	elsif line =~ /^(\s*)(fun|alias)\s+(\w+)/
-	  add_fun($3, lineno, $1.display_size(tabsize), line.strip)
+	  add_name($3, lineno, $1.display_size(tabsize), line.strip)
 	elsif line =~ /^(\s*)([A-Z_]+)\s*=/
-	  add_fun($2, lineno, $1.display_size(tabsize), line.strip)
+	  add_name($2, lineno, $1.display_size(tabsize), line.strip)
 	end
 	lineno += 1
       end
@@ -165,11 +173,10 @@ class FileDefs
   def add_method(name : String, indent : Int32, lineno : Int32, column : Int32, context : String)
     dprint "add_method: name #{name}, indent #{indent}, lineno #{lineno}"
     full_name = (class_stack.map {|d| d.name} + [name]).join(".")
-    method_stack.push (Def.new(name, lineno, indent, context))
     records.push (Def.new(full_name, lineno, column, context))
   end
 
-  def add_fun(name : String, lineno : Int32, column : Int32, context : String)
+  def add_name(name : String, lineno : Int32, column : Int32, context : String)
     full_name = (class_stack.map {|d| d.name} + [name]).join(".")
     records.push (Def.new(full_name, lineno, column, context))
   end
@@ -179,10 +186,6 @@ class FileDefs
     if class_stack.size > 0 && indent <= class_stack[-1].indent
       d = class_stack.pop
       dprint "Popped class #{d.name}"
-    end
-    while method_stack.size > 0 && indent <= method_stack[-1].indent
-      m = method_stack.pop
-      dprint "Popped method #{m.name}"
     end
   end
 
@@ -194,7 +197,7 @@ class FileDefs
   end
 end
 
-# Class defining a user entry fields in the form.
+# Class defining an entry field in the search form.
 class Entry
   property prompt : String	# prompt string
   property row : Int32		# line number on screen
@@ -203,6 +206,12 @@ class Entry
   property leftcol : Int32 	# starting column for entry
   property fillcols : Int32	# number of columns to right of prompt
 
+  # Values for type.
+  TYPE_INEXACT = 0
+  TYPE_EXACT   = 1
+  TYPE_GREP    = 6
+  TYPE_FILE    = 7
+
   def initialize(@prompt, @row, @type)
     @buf = ""
     @leftcol = prompt.size + 1
@@ -210,12 +219,11 @@ class Entry
     Ncurses.mvaddstr @row, 0, @prompt
   end
 
-  # Get an entry, return the last character typed (Enter, Up, Down, or C-d)
-  # The passed-in completion proc takes a prefix and returns the longest
-  # possible suffix for that prefix.
-
   alias CompletionProc = Proc(String)
 
+  # Prompt the user to enter a string for this entry, and return the last character
+  # typed (Enter, Up, Down, or C-d). The passed-in completion proc takes a prefix
+  # and returns the longest possible suffix for that prefix.
   def get_entry(&block : CompletionProc) : String
     Ncurses.mvaddstr(@row, 0, @prompt)
     Ncurses.move(@row, @leftcol)
@@ -274,7 +282,7 @@ class Entry
         @buf = ""
 	pos = 0
       when "?"
-        if @type != 6
+        if @type != TYPE_GREP
 	  suffix = yield
 	  @buf = @buf.insert(pos, suffix)
 	  pos += suffix.size
@@ -296,8 +304,9 @@ class Index
   property fdefs = Hash(String, FileDefs).new	# indexed by filelname
   property debug = false
   property tabsize = 8
-  property nrows = 0		# Ncurses.rows
-  property result_rows = 0 	# nrows - 7
+  property nrows = 0		# total number of lines in terminal window
+  property result_rows = 0 	# space for results at top of screen
+  property results = [] of Result
 
   def initialize(@debug, @tabsize)
   end
@@ -359,12 +368,29 @@ class Index
     fdefs.each do |filename, fdef|
       fdef.records.each do |r|
 	if partial_match
-	  if r.name.starts_with?(name)
+	  # partial_match means the name in the symbol table only has to start
+	  # with the name being searched, i.e., not match it entirely.
+	  if exact_match
+	    # We must include any classname qualifications in the match.
+	    if r.name.starts_with?(name)
+	      primary_results.push(Result.new(filename, r.name, r.lineno,r.context))
+	    end
+	  else
+	    # We can ignore any or all classname qualifications in the match.
+	    regexp = Regex.new("^.*[.]?(#{name}[^\.]*)$")
+	    match = regexp.match(r.name)
+	    if match && match[1]?
+	      secondary_results.push(Result.new(filename, match[1], r.lineno,r.context))
+	    end
+	  end
+        elsif exact_match
+	  if r.name == name
+	    # exact_match means the names must be identical.
 	    primary_results.push(Result.new(filename, r.name, r.lineno,r.context))
 	  end
-        elsif exact_match && r.name == name
-	  primary_results.push(Result.new(filename, r.name, r.lineno,r.context))
 	else
+	  # exact_match is false, which means the name being searched doesn't need to match
+	  # any of the class name qualifications of the name in the symbol table.
 	  regexp = Regex.new("(^|\\.)#{name}$")
 	  match = regexp.match(r.name)
 	  if match
@@ -418,17 +444,17 @@ class Index
       STDOUT.flush
       line = STDIN.gets
       return if line.nil?
-      search_type = line[0]
+      search_type = line[0].to_i
       search_term = line[1..]
       results = [] of Result
       case search_type
-      when '0'
+      when Entry::TYPE_INEXACT
         results = search(search_term, exact_match: false)
-      when '1'
+      when Entry::TYPE_EXACT
         results = search(search_term, exact_match: true)
-      when '6'
+      when Entry::TYPE_GREP
 	results = grepsearch(search_term)
-      when '7'
+      when Entry::TYPE_FILE
 	results = filesearch(search_term)
       else
 	puts "Unknown search type #{search_type}"
@@ -444,6 +470,8 @@ class Index
     end
   end
 	
+  # Convert an integer from 0 to 62 to a digit or a letter, for use
+  # in the left column of the search results display.
   def char_for(n : Int32) : String
     if n < 10
       return ('0' + n).to_s
@@ -455,10 +483,10 @@ class Index
   end
 
   # Display results, and return the number actually shown.
-  # Eventually we have to allow for an offset, when
-  # there are more results than will fit on the screen.
-  def show_results (results : Array(Result), offset : Int32) : Int32
-    shown = [results.size - offset, @result_rows - 2, 62].min
+  # The offset parameter says how many results to skip,
+  # which we use when there are more results than will fit on the screen.
+  def show_results (offset : Int32) : Int32
+    shown = [@results.size - offset, @result_rows - 2, 62].min
     Ncurses.move 0, 0
     Ncurses.clrtoeol
 
@@ -467,7 +495,7 @@ class Index
     nlen = "Name".size
     llen = "Line".size
     shown.times do |i|
-      r = results[i + offset]
+      r = @results[i + offset]
       flen = [flen, Path[r.filename].basename.size].max
       nlen = [nlen, r.name.size].max
       llen = [llen, r.line.to_s.size].max
@@ -485,7 +513,7 @@ class Index
       Ncurses.move i + 1, 0
       Ncurses.clrtoeol
       if i < shown
-	r = results[i + offset]
+	r = @results[i + offset]
 	Ncurses.mvaddstr i + 1, 0,
 	  "#{char_for(i)} " +
 	  "#{Path[r.filename].basename.pad_right(flen)} " +
@@ -497,17 +525,18 @@ class Index
     return shown
   end
 
+  # Perform a search appropriate for this entry's type (exact, inexact, regexp, file).
   def entry_search(entry : Entry, partial_match = false) : Array(Result)
     results = [] of Result
     s = entry.buf
     case entry.type
-    when 0
+    when Entry::TYPE_INEXACT
       results = search(s, exact_match: false, partial_match: partial_match)
-    when 1
+    when Entry::TYPE_EXACT
       results = search(s, exact_match: true, partial_match: partial_match)
-    when 6
+    when Entry::TYPE_GREP
       results = grepsearch(s)
-    when 7
+    when Entry::TYPE_FILE
       results = filesearch(s)
     end
     return results
@@ -536,21 +565,22 @@ class Index
   # and allow the user to select a result, which will
   # invoke $EDITOR on the selected file and line.
   # Return the last key entered by the user (C-d or C-i).
-  def move_to_results(results : Array(Result)) : String
+  def move_to_results : String
     done = false
     offset = 0
     c = ""
     i = 0
     shown = 0
     reload = true
+    rsize = @results.size
     until done
       if reload
-	shown = show_results(results, offset)
+	shown = show_results(offset)
 	reload = false
-	more = results.size - (offset + shown)
-	if results.size > @result_rows - 2
+	more = @results.size - (offset + shown)
+	if @results.size > @result_rows - 2
 	  Ncurses.mvaddstr @result_rows, 0,
-	    "* Lines #{offset + 1}-#{offset + shown} of #{results.size}, " +
+	    "* Lines #{offset + 1}-#{offset + shown} of #{rsize}, " +
 	    "#{more} more - press Space to go forward, Backspace to go back *"
 	end
       end
@@ -560,7 +590,7 @@ class Index
       case c
       when " "
         offset += shown
-	if offset < results.size
+	if offset < rsize
 	  reload = true
 	end
       when "C-h"
@@ -569,7 +599,7 @@ class Index
 	  reload = true
 	end
       when "C-m"
-	run_editor(results[i + offset].filename, results[i + offset].line)
+	run_editor(@results[i + offset].filename, @results[i + offset].line)
       when "Down", "C-n"
 	if i == shown - 1
 	  i = 0
@@ -596,7 +626,7 @@ class Index
 	    n = ch - 'A' + 36
 	  end
 	  if n != -1 && n < shown
-	    run_editor(results[n + offset].filename, results[n + offset].line)
+	    run_editor(@results[n + offset].filename, @results[n + offset].line)
 	  end
 	end
       end
@@ -605,30 +635,31 @@ class Index
   end
 
   def curses_interface
-    entries = [] of Entry
     Redwood.start_cursing
-    @nrows = Ncurses.rows
-    @result_rows = nrows - 7
     Ncurses.curs_set 1
 
-    # Add the four entry fields
-    row = @nrows - 6
-    entries.push Entry.new("Inexact name search:", row,   0)
-    entries.push Entry.new("Exact name search:",   row+1, 1)
-    entries.push Entry.new("Regexp search:",       row+2, 6)
-    entries.push Entry.new("File search:",         row+3, 7)
+    @nrows = Ncurses.rows
+    @results = [] of Result
+
+    # Add the four entry fields.
+    entries = [] of Entry
+    row = @nrows - 1
+    entries.push Entry.new("Inexact name search:", row-3, Entry::TYPE_INEXACT)
+    entries.push Entry.new("Exact name search:",   row-2, Entry::TYPE_EXACT)
+    entries.push Entry.new("Regexp search:",       row-1, Entry::TYPE_GREP)
+    entries.push Entry.new("File search:",         row,   Entry::TYPE_FILE)
+    @result_rows = @nrows - entries.size - 2	# 2 leaves space for a blank line plus a prompt line
 
     entry_number = 0
     done = false
-    results = [] of Result
     until done
       entry = entries[entry_number]
       c = entry.get_entry do
         # User hit ?, so try to do a completion.
 	# First, get all partial matches.
-	results = entry_search(entry, partial_match: true)
-	show_results(results, 0)
-	if results.size == 0
+	@results = entry_search(entry, partial_match: true)
+	show_results(0)
+	if @results.size == 0
 	  Ncurses.mvaddstr 0, 0, "Could not find #{entry.buf}"
 	end
 
@@ -637,9 +668,9 @@ class Index
 	prefix = s
 	suffix = ""
 	longest = s
-	if results.size > 0 && entry.type != 7
+	if @results.size > 0 && entry.type != Entry::TYPE_FILE
 	  longest = ""
-	  results.each do |r|
+	  @results.each do |r|
 	    name = r.name
 	    if name.starts_with?(prefix)
 	      if longest == ""
@@ -681,10 +712,10 @@ class Index
         # Show the results, and move the cursor to the results
 	# so that the user can select one.  The user may
 	# also choose to exit selection mode with Tab or C-d.
-	results = entry_search(entry, partial_match: false)
-	show_results(results, 0)
-	if results.size > 0
-	  c = move_to_results(results)
+	@results = entry_search(entry, partial_match: false)
+	show_results(0)
+	if @results.size > 0
+	  c = move_to_results
 	  if c == "C-d"
 	    done = true
 	  end
@@ -692,8 +723,8 @@ class Index
 	  Ncurses.mvaddstr 0, 0, "Could not find #{entry.buf}"
 	end
       when "C-i"
-        if results.size > 0
-	  c = move_to_results(results)
+        if @results.size > 0
+	  c = move_to_results
 	  if c == "C-d"
 	    done = true
 	  end
