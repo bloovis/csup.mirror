@@ -29,7 +29,7 @@ instances where Csup has to read the raw message files.
 I also eliminated the parallel processing that Sup-notmuch used to load thread
 data in the background, which required many mutexes and a confusing control flow.
 
-Csup has a built-in SMTP client for sending email,
+Csup has a built-in SMTP client *and* an SMTP2GO API client for sending email,
 so it does not depend on an external program like `sendmail`
 for this purpose.
 
@@ -37,29 +37,10 @@ The result is a mail client that looks and behaves almost identically
 to Sup but is a bit faster (in most cases) and uses much less memory.  It is also
 easier to deploy, being a single compiled binary.
 
-## Pre-build Configuration
+## Documentation
 
-See the [Csup Guide](https://www.bloovis.com/csupguide/) for information
-on how to set up notmuch and Csup.  Or look in the `guide/content` subdirectory
-of the source repository for the source to the guide.
-
-## Build
-
-To build Csup, type:
-
-    make
-
-To build the guide, type:
-
-    make guidesetup
-    make guide
-
-To view the guide on your local machine, type:
-
-    make guideview
-
-Then point your browser to the URL printed by the above command,
-typically something like <http://localhost:1313/csupguide/> .
+See the [User Guide](www/index.md) for information
+on how to set up notmuch and Csup.
 
 ## Acknowledgements
 
@@ -71,3 +52,10 @@ Csup is built on the work of other, smarter people, including (but not limited t
 * arcage for the Crystal email shard
 * Samual Black and Joakim Reinert for the Crystal ncurses shard
 * The creators of the beautiful Crystal programming language
+
+# Crscope
+
+This repository also includes crscope, a source code browsing tool
+for Crystal.  It is partial reimplementation of
+[cscope](https://cscope.sourceforge.net/), the venerable source code browing tool for C.
+For more information about crscope, go [here](www/crscope.md).

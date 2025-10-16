@@ -1,7 +1,5 @@
 # Csup User Guide
 
-For more information about crscope, go [here](crscope.md).
-
 ## Introduction to Csup
 
 Csup is a terminal-based email client for Linux,
