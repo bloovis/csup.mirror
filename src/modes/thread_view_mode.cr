@@ -455,7 +455,7 @@ class ThreadViewMode < LineCursorMode
       end
 
       headers = {
-        "Date" => "#{m.date.to_message_nice_s} (#{m.date.to_nice_distance_s})",
+        "Date" => "#{m.date.to_local.to_message_nice_s} (#{m.date.to_nice_distance_s})",
         "Subject" => m.subj
       }
 
