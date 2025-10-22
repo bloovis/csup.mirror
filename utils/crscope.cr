@@ -3,17 +3,17 @@
 # I've used cscope for decades to examine C source trees.  I also added
 # commands to my MicroEMACS editor to use cscope without leaving
 # the editor.  This program implements a subset of the cscope features,
-# but for Crystal source trees.  Because MicroEMACS only needs the
-# line-oriented interface of cscope, that's the only interface I
-# implemented for crscope.
+# but for Crystal source trees.  MicroEMACS only needs the
+# line-oriented interface of cscope, but I also implemented
+# the curses-oriented interface for using outside of an editor.
 #
-# Also, due to the difficulty of parsing Crystal, crscope uses very crude
+# Due to the difficulty of parsing Crystal, crscope uses very crude
 # heuristics for locating the definitions of methods, class, modules, libraries,
 # and constants.  For example, it assumes that the indention of a "class" or
 # "def" statement is the same as the indention for the matching "end" statement.
 # Furthermore, crscope does not attempt to find all uses of a particular symbol.
 #
-# The three search types that crscope implements are:
+# The four search types that crscope implements are:
 #
 # 0 - Find all (possibly inexact) matches for a method.  Thus,
 #     searching for "print" will find "Class1.print", "Class2.print", etc.
@@ -63,11 +63,13 @@ class String
     return self[0,max]
   end
 
+  # Pad a string on the left with spaces.
   def pad_left(width : Int32)
     pad = width - self.size
     " " * pad + self
   end
 
+  # Pad a string on the right with spaces.
   def pad_right(width : Int32)
     pad = width - self.size
     self + " " * pad
@@ -105,7 +107,7 @@ class FileDefs
   # Ephemeral stack of modules and classes, used only during parsing.
   property class_stack = [] of Def
 
-  # Permanent record of defintions, using fully qualified names.
+  # Permanent record of definitions, using fully qualified names.
   property records = [] of Def
 
   property debug = false
@@ -114,6 +116,9 @@ class FileDefs
   def initialize(@filename : String, @debug = false, @tabsize = 8)
   end
 
+  # Read the source file and use our ugly heuristics to find the
+  # definitions of classes, modules, C libraries and functions,
+  # aliases, methods, and constants.
   def parse_file
     dprint "FileDefs.parse_file: filename #{@filename}, tabsize #{@tabsize}"
     File.open(@filename) do |f|
@@ -125,15 +130,19 @@ class FileDefs
 	# - double-colon qualified class (e.g. class Blotz::Blivot):
 	#   replace the :: with .
 	if line =~ /^(\s*)(class|module|lib)\s+([\w:]+)/
+	  # Classes, modules, and C libraries.
 	  space = $1
 	  name = $3.gsub("::", ".")
 	  one_line = false
+
+	  # One-liner class defs don't need to be pushed on the stack.
 	  if line =~ /;\s*end\s*$/
 	    one_line = true
 	  end
 	  add_class(name, space.display_size(tabsize), lineno, space.size, line.strip,
 		    one_line)
 	elsif line =~ /^(\s*)abstract\s*class\s+([\w:]+)/
+	  # Astract classes have to be handled separately due to regex issues.
 	  space = $1
 	  name = $2.gsub("::", ".")
 	  one_line = false
@@ -143,13 +152,18 @@ class FileDefs
 	  add_class(name, space.display_size(tabsize), lineno, space.size, line.strip,
 		    one_line)
 	elsif line =~ /^(\s*)def\s+(self\.)?(\w+)/
-	  add_method($3, $1.display_size(tabsize), lineno, $1.size, line.strip)
+	  # Methods.
+	  add_name($3, lineno, $1.size, line.strip)
 	elsif line =~ /^(\s*)end(\s|$)/
+	  # If this is the "end" of a module or class, pop the enclosed modules or
+	  # classes off of the stack.
 	  pop_defs($1.display_size(tabsize))
 	elsif line =~ /^(\s*)(fun|alias)\s+(\w+)/
-	  add_name($3, lineno, $1.display_size(tabsize), line.strip)
+	  # C library functions and class aliases.
+	  add_name($3, lineno, $1.size, line.strip)
 	elsif line =~ /^(\s*)([A-Z_]+)\s*=/
-	  add_name($2, lineno, $1.display_size(tabsize), line.strip)
+	  # Constants.
+	  add_name($2, lineno, $1.size, line.strip)
 	end
 	lineno += 1
       end
@@ -160,6 +174,8 @@ class FileDefs
     puts s if @debug
   end
 
+  # If this is a one-liner class definition, add it to the permanent record of names.
+  # Otherwise push it on the stack, so that we can handle nested classes.
   def add_class(name : String, indent : Int32, lineno : Int32, column : Int32,
 		context : String, one_line = false)
     dprint "add_class: name #{name}, indent #{indent}, lineno #{lineno}, one_line #{one_line}"
@@ -170,17 +186,15 @@ class FileDefs
     records.push (Def.new(full_name, lineno, column, context))
   end
 
-  def add_method(name : String, indent : Int32, lineno : Int32, column : Int32, context : String)
-    dprint "add_method: name #{name}, indent #{indent}, lineno #{lineno}"
-    full_name = (class_stack.map {|d| d.name} + [name]).join(".")
-    records.push (Def.new(full_name, lineno, column, context))
-  end
-
+  # Add a name to the permanent record of names.
   def add_name(name : String, lineno : Int32, column : Int32, context : String)
+    dprint "add_name: name #{name}, lineno #{lineno}"
     full_name = (class_stack.map {|d| d.name} + [name]).join(".")
     records.push (Def.new(full_name, lineno, column, context))
   end
 
+  # Pop the most recent class definition after seeing an "end" statement
+  # of the same indentation.
   def pop_defs(indent : Int32)
     dprint "pop_defs: indent #{indent}"
     if class_stack.size > 0 && indent <= class_stack[-1].indent
@@ -576,12 +590,14 @@ class Index
     until done
       if reload
 	shown = show_results(offset)
-	reload = false
 	more = @results.size - (offset + shown)
+	reload = false
 	if @results.size > @result_rows - 2
 	  Ncurses.mvaddstr @result_rows, 0,
 	    "* Lines #{offset + 1}-#{offset + shown} of #{rsize}, " +
-	    "#{more} more - press Space to go forward, Backspace to go back *"
+	    "#{more} more - press Space to go " +
+	    (more == 0 ? "to the start" : "forward") +
+	    ", Backspace to go back *"
 	end
       end
       Ncurses.move i + 1, 0
@@ -590,9 +606,10 @@ class Index
       case c
       when " "
         offset += shown
-	if offset < rsize
-	  reload = true
+	if offset >= rsize
+	  offset = 0
 	end
+	reload = true
       when "C-h"
         if offset > 0
 	  offset = [offset - @result_rows, 0].max
