@@ -65,8 +65,11 @@ Crscope's search types are more limited than cscope's:
 ## Curses-based interface
 
 Aside from completions and search field editing (described below),
-the default curses-based user interface is as close to cscope as possible, including key bindings and
-display format.
+the default curses-based user interface attempts to be close to cscope, though some
+features are missing.
+
+(Note: in the following descriptions, Ctrl key combinations are
+indicated using the notation `C-x`, where `x` is a letter key.)
 
 The screen is divided into two sections:
 
@@ -85,7 +88,9 @@ In the search entry fields, you can use Emacs-style editing keys.  Hit
 the ? key to show possible matches in the search results, or hit Enter to perform a
 more precise search.
 
-Press `C-d` (Control-D) at any point to quit.
+Press `C-d` at any point to quit.
+
+Press `C-c` at any point to toggle the "ignore case" flag.
 
 ## Line-oriented interface
 
