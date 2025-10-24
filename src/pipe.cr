@@ -91,7 +91,7 @@ class Pipe
     end
 
     if (check_status && exit_status != 0) || (check_stderr && !stderr_str.empty?)
-      raise PipeError.new("Failed to execute #{prog}: exitcode=#{exit_status}, stderr=#{stderr_str}")
+      raise PipeError.new("Failed to execute #{prog} #{args}: exitcode=#{exit_status}, stderr=#{stderr_str}")
     end
     stdout_str
   end
