@@ -233,85 +233,6 @@ class Entry
     Ncurses.mvaddstr @row, 0, @prompt
   end
 
-  alias CompletionProc = Proc(String)
-
-  # Prompt the user to enter a string for this entry, and return the last character
-  # typed (Enter, Up, Down, or C-d). The passed-in completion proc takes a prefix
-  # and returns the longest possible suffix for that prefix.
-  def get_entry(&block : CompletionProc) : String
-    Ncurses.mvaddstr(@row, 0, @prompt)
-    Ncurses.move(@row, @leftcol)
-    Ncurses.clrtoeol
-    Ncurses.curs_set 1
-    Ncurses.refresh
-
-    pos = @buf.size
-    done = false
-    aborted = false
-    lastc = ""
-    while true
-      # Redraw the @buf buffer.
-      if @buf.size >= fillcols
-	# Answer is too big to fit on screen.  Just show the right portion that
-	# does fit.
-	Ncurses.mvaddstr(@row, @leftcol, @buf[@buf.size-fillcols..@buf.size-1])
-        Ncurses.move(@row, Ncurses.cols - 1)
-      else
-        Ncurses.mvaddstr(@row, @leftcol, @buf + (" " * (fillcols - @buf.size)))
-        Ncurses.move(@row, @leftcol + pos)
-      end
-      Ncurses.refresh
-
-      c = Ncurses.getkey
-      next if c == ""
-      case c
-      when "C-a"
-        pos = 0
-      when "C-e"
-        pos = @buf.size
-      when "Left", "C-b"
-        if pos > 0
-	  pos -= 1
-	end
-      when "Right", "C-f"
-        if pos < @buf.size
-	  pos += 1
-	end
-      when "C-h", "Delete"
-        if !(c == "C-h" && pos == 0)
-	  if c == "C-h"
-	    pos -= 1
-	  end
-	  left = (pos == 0) ? "" : @buf[0..pos-1]
-	  right = (pos >= @buf.size - 1) ? "" : @buf[pos+1..]
-	  @buf = left + right
-	end
-      when "C-k"
-        if pos == 0
-	  @buf = ""
-	else
-	  @buf = @buf[0..pos-1]
-	end
-      when "C-u"
-        @buf = ""
-	pos = 0
-      when "?"
-        if @type != TYPE_GREP
-	  suffix = yield
-	  @buf = @buf.insert(pos, suffix)
-	  pos += suffix.size
-	end
-      when "C-m", "C-d", "Up", "Down", "C-g", "C-n", "C-p", "C-i"
-        return c
-      else
-	if c.size == 1
-	  @buf = @buf.insert(pos, c)
-	  pos += 1
-	end
-      end
-      lastc = c
-    end
-  end
 end
 
 class Index
@@ -321,6 +242,7 @@ class Index
   property nrows = 0		# total number of lines in terminal window
   property result_rows = 0 	# space for results at top of screen
   property results = [] of Result
+  property ignore_case = false
 
   def initialize(@debug, @tabsize)
   end
@@ -377,28 +299,32 @@ class Index
   end
 
   def search(name : String, exact_match = false, partial_match = false) : Array(Result)
+    if @ignore_case
+      name = name.downcase
+    end
     primary_results = [] of Result
     secondary_results = [] of Result
     fdefs.each do |filename, fdef|
       fdef.records.each do |r|
+        rname = @ignore_case ? r.name.downcase : r.name
 	if partial_match
 	  # partial_match means the name in the symbol table only has to start
 	  # with the name being searched, i.e., not match it entirely.
 	  if exact_match
 	    # We must include any classname qualifications in the match.
-	    if r.name.starts_with?(name)
+	    if rname.starts_with?(name)
 	      primary_results.push(Result.new(filename, r.name, r.lineno,r.context))
 	    end
 	  else
 	    # We can ignore any or all classname qualifications in the match.
 	    regexp = Regex.new("^.*[.]?(#{name}[^\.]*)$")
-	    match = regexp.match(r.name)
+	    match = regexp.match(rname)
 	    if match && match[1]?
 	      secondary_results.push(Result.new(filename, match[1], r.lineno,r.context))
 	    end
 	  end
         elsif exact_match
-	  if r.name == name
+	  if rname == name
 	    # exact_match means the names must be identical.
 	    primary_results.push(Result.new(filename, r.name, r.lineno,r.context))
 	  end
@@ -406,7 +332,7 @@ class Index
 	  # exact_match is false, which means the name being searched doesn't need to match
 	  # any of the class name qualifications of the name in the symbol table.
 	  regexp = Regex.new("(^|\\.)#{name}$")
-	  match = regexp.match(r.name)
+	  match = regexp.match(rname)
 	  if match
 	    secondary_results.push(Result.new(filename, r.name, r.lineno,r.context))
 	  end
@@ -426,7 +352,11 @@ class Index
       filenames = fdefs.each.map {|filename, fdef| filename}
     end
     filenames.each do |filename|
-      pipe = Redwood::Pipe.new("grep", ["-E", "-n", name, filename])
+      options = ["-E", "-n"]
+      if @ignore_case
+	options.push("-i")
+      end
+      pipe = Redwood::Pipe.new("grep", options + [name, filename])
       pipe.start do |p|
         p.receive do |f|
 	  while s = f.gets(chomp: true)
@@ -501,7 +431,7 @@ class Index
   # which we use when there are more results than will fit on the screen.
   def show_results (offset : Int32) : Int32
     shown = [@results.size - offset, @result_rows - 2, 62].min
-    Ncurses.move 0, 0
+    Ncurses.move 1, 0
     Ncurses.clrtoeol
 
     # Calculate maximum lengths of files, names, and line numbers.
@@ -516,7 +446,7 @@ class Index
     end
 
     # Display the header line
-    Ncurses.mvaddstr 0, 0,
+    Ncurses.mvaddstr 1, 0,
       "  " +
       "File".pad_right(flen) + " " +
       "Name".pad_right(nlen) + " " +
@@ -524,11 +454,11 @@ class Index
 
     # Display the results with fields padded nicely.
     (0..@result_rows-1).each do |i|
-      Ncurses.move i + 1, 0
+      Ncurses.move i + 2, 0
       Ncurses.clrtoeol
       if i < shown
 	r = @results[i + offset]
-	Ncurses.mvaddstr i + 1, 0,
+	Ncurses.mvaddstr i + 2, 0,
 	  "#{char_for(i)} " +
 	  "#{Path[r.filename].basename.pad_right(flen)} " +
 	  "#{r.name.pad_right(nlen)} " +
@@ -575,6 +505,17 @@ class Index
     end
   end
 
+  def show_status(s : String)
+    Ncurses.move(0, 0)
+    Ncurses.clrtoeol
+    Ncurses.mvaddstr(0,0, s)
+  end
+    
+  def toggle_ignore_case
+    @ignore_case = ! @ignore_case
+    show_status("Caseless mode is now " + (@ignore_case ? "ON" : "OFF"))
+  end
+
   # Move the cursor to the results at the top of the screen
   # and allow the user to select a result, which will
   # invoke $EDITOR on the selected file and line.
@@ -593,14 +534,14 @@ class Index
 	more = @results.size - (offset + shown)
 	reload = false
 	if @results.size > @result_rows - 2
-	  Ncurses.mvaddstr @result_rows, 0,
+	  Ncurses.mvaddstr @result_rows + 1, 0,
 	    "* Lines #{offset + 1}-#{offset + shown} of #{rsize}, " +
 	    "#{more} more - press Space to go " +
 	    (more == 0 ? "to the start" : "forward") +
 	    ", Backspace to go back *"
 	end
       end
-      Ncurses.move i + 1, 0
+      Ncurses.move i + 2, 0
       c = Ncurses.getkey
       next if c == ""
       case c
@@ -610,6 +551,8 @@ class Index
 	  offset = 0
 	end
 	reload = true
+      when "C-c"
+        toggle_ignore_case
       when "C-h"
         if offset > 0
 	  offset = [offset - @result_rows, 0].max
@@ -651,6 +594,87 @@ class Index
     return c
   end
 
+  # Prompt the user to enter a string for this entry, and return the last character
+  # typed (Enter, Up, Down, or C-d). The passed-in completion proc
+  # returns the longest possible suffix for the current entry buffer.
+
+  def get_entry(e : Entry, &block : Proc(String)) : String
+    Ncurses.mvaddstr(e.row, 0, e.prompt)
+    Ncurses.move(e.row, e.leftcol)
+    Ncurses.clrtoeol
+    Ncurses.curs_set 1
+    Ncurses.refresh
+
+    pos = e.buf.size
+    done = false
+    aborted = false
+    lastc = ""
+    while true
+      # Redraw the e.buf buffer.
+      if e.buf.size >= e.fillcols
+	# Answer is too big to fit on screen.  Just show the right portion that
+	# does fit.
+	Ncurses.mvaddstr(e.row, e.leftcol, e.buf[e.buf.size-e.fillcols..e.buf.size-1])
+        Ncurses.move(e.row, Ncurses.cols - 1)
+      else
+        Ncurses.mvaddstr(e.row, e.leftcol, e.buf + (" " * (e.fillcols - e.buf.size)))
+        Ncurses.move(e.row, e.leftcol + pos)
+      end
+      Ncurses.refresh
+
+      c = Ncurses.getkey
+      next if c == ""
+      case c
+      when "C-a"
+        pos = 0
+      when "C-c"
+	toggle_ignore_case
+      when "C-e"
+        pos = e.buf.size
+      when "Left", "C-b"
+        if pos > 0
+	  pos -= 1
+	end
+      when "Right", "C-f"
+        if pos < e.buf.size
+	  pos += 1
+	end
+      when "C-h", "Delete"
+        if !(c == "C-h" && pos == 0)
+	  if c == "C-h"
+	    pos -= 1
+	  end
+	  left = (pos == 0) ? "" : e.buf[0..pos-1]
+	  right = (pos >= e.buf.size - 1) ? "" : e.buf[pos+1..]
+	  e.buf = left + right
+	end
+      when "C-k"
+        if pos == 0
+	  e.buf = ""
+	else
+	  e.buf = e.buf[0..pos-1]
+	end
+      when "C-u"
+        e.buf = ""
+	pos = 0
+      when "?"
+        if e.type != Entry::TYPE_GREP
+	  suffix = yield
+	  e.buf = e.buf.insert(pos, suffix)
+	  pos += suffix.size
+	end
+      when "C-m", "C-d", "Up", "Down", "C-g", "C-n", "C-p", "C-i"
+        return c
+      else
+	if c.size == 1
+	  e.buf = e.buf.insert(pos, c)
+	  pos += 1
+	end
+      end
+      lastc = c
+    end
+  end
+
   def curses_interface
     Redwood.start_cursing
     Ncurses.curs_set 1
@@ -665,19 +689,19 @@ class Index
     entries.push Entry.new("Exact name search:",   row-2, Entry::TYPE_EXACT)
     entries.push Entry.new("Regexp search:",       row-1, Entry::TYPE_GREP)
     entries.push Entry.new("File search:",         row,   Entry::TYPE_FILE)
-    @result_rows = @nrows - entries.size - 2	# 2 leaves space for a blank line plus a prompt line
+    @result_rows = @nrows - entries.size - 3	# leave room for status line, blank line, and prompt line
 
     entry_number = 0
     done = false
     until done
       entry = entries[entry_number]
-      c = entry.get_entry do
+      c = get_entry(entry) do
         # User hit ?, so try to do a completion.
 	# First, get all partial matches.
 	@results = entry_search(entry, partial_match: true)
 	show_results(0)
 	if @results.size == 0
-	  Ncurses.mvaddstr 0, 0, "Could not find #{entry.buf}"
+	  show_status "Could not find #{entry.buf}"
 	end
 
 	# Find the longest possible match for the string entered so far.
