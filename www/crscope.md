@@ -82,9 +82,9 @@ the Down, Up, `C-n`, and `C-p` keys.
 
 In the search results section, hit the Enter key to run your editor on
 the selected file and jump to the selected line number.  You can also
-type the letter shown on the left column to run the editor edit on that file and line.
+type the letter shown on the left column to run the editor on that file and line.
 
-In the search entry fields, you can use Emacs-style editing keys.  Hit
+In the search entry fields, you can use EMACS-style editing keys.  Hit
 the ? key to show possible matches in the search results, or hit Enter to perform a
 more precise search.
 
@@ -101,7 +101,7 @@ a limited set of search types.  Start the line-oriented mode with the `-l` optio
 crscope -l
 ```
 
-This mode is used by MicroEMACS, and it could possibly be used other editors
+This mode is used by MicroEMACS, and it could possibly be used by other editors
 that have cscope integration.  This mode implements only the following search types:
 
 * 0 - inexact name search (partially-qualified or unqualified names)
