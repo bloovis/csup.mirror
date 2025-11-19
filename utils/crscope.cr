@@ -223,6 +223,7 @@ class Entry
   # Values for type.
   TYPE_INEXACT = 0
   TYPE_EXACT   = 1
+  TYPE_SEARCH  = 4
   TYPE_GREP    = 6
   TYPE_FILE    = 7
 
@@ -342,7 +343,7 @@ class Index
     return primary_results + secondary_results
   end
 
-  def grepsearch(name : String) : Array(Result)
+  def grepsearch(name : String, fixed = false) : Array(Result)
     results = [] of Result
     # Get the list of filenames, either from crscope.files,
     # or from the filenames listed in crscope.out.
@@ -352,7 +353,13 @@ class Index
       filenames = fdefs.each.map {|filename, fdef| filename}
     end
     filenames.each do |filename|
-      options = ["-E", "-n"]
+      if fixed
+	# Search for a fixed string, not a regexp.
+	options = ["-F", "-n"]
+      else
+	# Search for a regexp.
+	options = ["-E", "-n"]
+      end
       if @ignore_case
 	options.push("-i")
       end
@@ -396,8 +403,10 @@ class Index
         results = search(search_term, exact_match: false)
       when Entry::TYPE_EXACT
         results = search(search_term, exact_match: true)
+      when Entry::TYPE_SEARCH
+	results = grepsearch(search_term, true)
       when Entry::TYPE_GREP
-	results = grepsearch(search_term)
+	results = grepsearch(search_term, false)
       when Entry::TYPE_FILE
 	results = filesearch(search_term)
       else
@@ -478,8 +487,10 @@ class Index
       results = search(s, exact_match: false, partial_match: partial_match)
     when Entry::TYPE_EXACT
       results = search(s, exact_match: true, partial_match: partial_match)
+    when Entry::TYPE_SEARCH
+      results = grepsearch(s, true)
     when Entry::TYPE_GREP
-      results = grepsearch(s)
+      results = grepsearch(s, false)
     when Entry::TYPE_FILE
       results = filesearch(s)
     end
@@ -685,9 +696,10 @@ class Index
     # Add the four entry fields.
     entries = [] of Entry
     row = @nrows - 1
-    entries.push Entry.new("Inexact name search:", row-3, Entry::TYPE_INEXACT)
-    entries.push Entry.new("Exact name search:",   row-2, Entry::TYPE_EXACT)
-    entries.push Entry.new("Regexp search:",       row-1, Entry::TYPE_GREP)
+    entries.push Entry.new("Inexact name search:", row-4, Entry::TYPE_INEXACT)
+    entries.push Entry.new("Exact name search:",   row-3, Entry::TYPE_EXACT)
+    entries.push Entry.new("Regexp search:",       row-2, Entry::TYPE_GREP)
+    entries.push Entry.new("Non-regexp search:",   row-1, Entry::TYPE_SEARCH)
     entries.push Entry.new("File search:",         row,   Entry::TYPE_FILE)
     @result_rows = @nrows - entries.size - 3	# leave room for status line, blank line, and prompt line
 
