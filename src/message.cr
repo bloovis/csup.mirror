@@ -456,7 +456,8 @@ class Message
 	#STDERR.puts "old snippet for #{@id}: '#{@snippet}'"
         @snippet ||= ""
         @snippet += " " unless @snippet.empty?
-        @snippet += line.gsub(/[\r\n]/, "").strip
+        # Remove non-printable or non-ASCII characters.
+        @snippet += line.gsub(/[^ -~]/, "").strip
         oldlen = @snippet.length
         @snippet = @snippet[0 ... SNIPPET_LEN].chomp
         @snippet += "..." if @snippet.length < oldlen
