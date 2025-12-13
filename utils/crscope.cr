@@ -7,12 +7,6 @@
 # line-oriented interface of cscope, but I also implemented
 # the curses-oriented interface for using outside of an editor.
 #
-# Due to the difficulty of parsing Crystal, crscope uses very crude
-# heuristics for locating the definitions of methods, class, modules, libraries,
-# and constants.  For example, it assumes that the indention of a "class" or
-# "def" statement is the same as the indention for the matching "end" statement.
-# Furthermore, crscope does not attempt to find all uses of a particular symbol.
-#
 # The four search types that crscope implements are:
 #
 # 0 - Find all (possibly inexact) matches for a method.  Thus,
@@ -27,6 +21,8 @@
 # results of its parsing to crscope.out, which is plain-text file.
 
 require "option_parser"
+require "compiler/crystal/syntax"
+
 require "../src/pipe"
 require "../src/supcurses"
 
@@ -90,17 +86,216 @@ end
 # Class used to record all name definitions for a single file.
 class FileDefs
 
+  TYPES = {
+    :class  => "C",
+    :module => "M",
+    :def    => "D",
+    :macro  => "m",
+    :lib    => "L",
+    :struct => "S",
+    :fun    => "F",
+    :assign => "A",
+    :call   => "c",
+    :end    => "E",
+    :symbol => "s",
+  }
+
   # Class used to record a name definition.
   class Def
+    property type : Symbol
     property name : String
     property lineno : Int32
-    property indent : Int32
+    property indent : Int32	# lexical indentation, used only for Ruby
     property context : String
 
-    def initialize(@name, @lineno, @indent, @context)
-      #puts "Def.initialize #{@name}:#{@lineno}:#{@indent}:#{@context}"
+    def initialize(@type, @name, @lineno, @indent, @context)
+      #puts "Def.initialize #{@type},#{@name},#{@lineno},#{@indent},#{@context}"
     end
   end
+
+  # Class used to process nodes in the abstract syntax tree
+  # for a parsed Crystal program.
+  class Visitor < Crystal::Visitor
+    @filename : String
+    @content : String
+    @scope : Array(String)
+    @defs : Array(String)
+    @fdefs : FileDefs
+
+    def initialize(@filename, @content, @fdefs)
+      @scope = [] of String
+      @defs = [] of String
+    end
+
+    def single_name(type : Symbol, node) : String
+      name = (@scope + [node.name]).join(".")
+      lineno = get_lineno(node)
+      column = get_column(node)
+      context = get_context(node)
+      @fdefs.add_name(type, name, lineno, column, context)
+      #puts [type, name, location, context].join("#")
+      #puts "key for #{type} is #{TYPES.key_for?(type)}"
+      return name.to_s
+    end
+
+    def unscoped_single_name(type : Symbol, node) : String
+      name = node.name
+      lineno = get_lineno(node)
+      column = get_column(node)
+      context = get_context(node)
+      @fdefs.add_name(type, name, lineno, column, context)
+      #puts [type, name, location, context].join("#")
+      #puts "key for #{type} is #{TYPES.key_for?(type)}"
+      return name.to_s
+    end
+
+    def multi_name(type : Symbol, node) : String
+      name = node.name.names.last
+      names = (@scope + node.name.names).join(".")
+      lineno = get_lineno(node)
+      column = get_column(node)
+      context = get_context(node)
+      @fdefs.add_name(type, name, lineno, column, context)
+      #puts [type, names, location, context].join("#")
+      #puts "key for #{type} is #{TYPES.key_for?(type)}"
+      return names
+    end
+      
+    def visit(node : Crystal::ClassDef)
+      name = multi_name(:class, node)
+      @scope << node.name.names.last
+      true
+    end
+
+    def visit(node : Crystal::ModuleDef)
+      name = multi_name(:module, node)
+      @scope << name
+      true
+    end
+
+    def visit(node : Crystal::Def)
+      name = single_name(:def, node)
+      @defs << name
+      true
+    end
+
+    def visit(node : Crystal::Macro)
+      single_name(:macro, node)
+      true
+    end
+
+    def visit(node : Crystal::LibDef)
+      name = single_name(:lib, node)
+      @scope << name
+      true
+    end
+
+    def visit(node : Crystal::StructOrUnionDef)
+      name = single_name(:struct, node)
+      @scope << name
+      true
+    end
+
+    def visit(node : Crystal::FunDef)
+      single_name(:fun, node)
+      true
+    end
+
+    def visit(node : Crystal::Expressions)
+      #puts "visit(expressions): node #{node.class}"
+      true
+    end
+
+    def visit(node : Crystal::ASTNode)
+      #puts "visit(astnode): node #{node.class}"
+      true
+    end
+
+    def visit(node : Crystal::Assign)
+      lineno = get_lineno(node)
+      column = get_column(node)
+      context = get_context(node)
+      target = node.target
+      if target.is_a?(Crystal::Path)
+	name = target.names.join(".")
+      elsif target.is_a?(Crystal::Var) || target.is_a?(Crystal::InstanceVar)
+	name = target.name
+      else
+	name = "<unknown>"
+      end
+      @fdefs.add_name(:assign, name, lineno, column, context)
+      #puts ["A", name, location, context].join("#")
+      true
+    end
+
+    def visit(node : Crystal::Path)
+      names = node.names.join("::")
+      #puts "visit(path): names #{names}"
+      true
+    end
+
+    def visit(node : Crystal::Call)
+      unscoped_single_name(:call, node)
+
+      #puts "visit(call): name #{node.name}, scope #{@scope.join('.')}"
+      #location = node.location
+      #if location
+	#filename = location.filename || "<unknown>"
+	#puts "  filename #{filename}, line #{location.line_number}"
+      #end
+      #obj = node.obj
+      #if obj
+	#puts "  obj #{obj.class}"
+      #end
+      true
+    end
+
+    def visit(node : Crystal::InstanceVar | Crystal::ReadInstanceVar | Crystal::ClassVar |
+                     Crystal::Global | Crystal::OpAssign | Crystal::MultiAssign |
+		     Crystal::Var)
+      #puts "visit(other): node #{node.class}"
+    end
+
+    def end_visit(node : Crystal::Def)
+      #defs = @defs.join("/")
+      #puts "end_visit Def, defs = #{defs}"
+      name = @defs.pop?
+      if name
+	@fdefs.add_name(:end, name, 0, 0, "")
+	#puts ["E", name, "", ""].join("#")
+      end
+    end
+
+    def end_visit(node : Crystal::ClassDef | Crystal::ModuleDef |
+    		  Crystal::CStructOrUnionDef | Crystal::LibDef)
+      #puts "end_visit: node #{node.class}"
+      return unless node.location
+      @scope.pop?
+    end
+
+    def get_lineno(node) : Int32
+      location = node.location
+      if location
+	return location.line_number
+      else
+	return 1
+      end
+    end
+
+    def get_column(node) : Int32
+      location = node.location
+      if location
+	return location.column_number
+      else
+	return 1
+      end
+    end
+
+    def get_context(node) : String
+      node.to_s.lines.first
+    end
+
+  end	# Class Visitor
 
   property filename = ""
 
@@ -116,10 +311,10 @@ class FileDefs
   def initialize(@filename : String, @debug = false, @tabsize = 8)
   end
 
-  # Read the source file and use our ugly heuristics to find the
+  # Read the Ruby source file and use our ugly heuristics to find the
   # definitions of classes, modules, C libraries and functions,
   # aliases, methods, and constants.
-  def parse_file
+  def parse_ruby_file
     dprint "FileDefs.parse_file: filename #{@filename}, tabsize #{@tabsize}"
     File.open(@filename) do |f|
       lineno = 1
@@ -132,6 +327,7 @@ class FileDefs
 	if line =~ /^(\s*)(class|module|lib)\s+([\w:]+)/
 	  # Classes, modules, and C libraries.
 	  space = $1
+	  kind = $2
 	  name = $3.gsub("::", ".")
 	  one_line = false
 
@@ -139,7 +335,14 @@ class FileDefs
 	  if line =~ /;\s*end\s*$/
 	    one_line = true
 	  end
-	  add_class(name, space.display_size(tabsize), lineno, space.size, line.strip,
+
+	  type = case kind
+	    when "class" then :class
+	    when "module" then :module
+	    when "lib" then :lib
+	    else :symbol
+	  end
+	  add_class(type, name, space.display_size(tabsize), lineno, space.size, line.strip,
 		    one_line)
 	elsif line =~ /^(\s*)abstract\s*class\s+([\w:]+)/
 	  # Astract classes have to be handled separately due to regex issues.
@@ -149,25 +352,36 @@ class FileDefs
 	  if line =~ /;\s*end\s*$/
 	    one_line = true
 	  end
-	  add_class(name, space.display_size(tabsize), lineno, space.size, line.strip,
+	  add_class(:class, name, space.display_size(tabsize), lineno, space.size, line.strip,
 		    one_line)
 	elsif line =~ /^(\s*)def\s+(self\.)?(\w+)/
 	  # Methods.
-	  add_name($3, lineno, $1.size, line.strip)
+	  add_name(:def, $3, lineno, $1.size, line.strip)
 	elsif line =~ /^(\s*)end(\s|$)/
 	  # If this is the "end" of a module or class, pop the enclosed modules or
 	  # classes off of the stack.
 	  pop_defs($1.display_size(tabsize))
 	elsif line =~ /^(\s*)(fun|alias)\s+(\w+)/
 	  # C library functions and class aliases.
-	  add_name($3, lineno, $1.size, line.strip)
+	  add_name(:symbol, $3, lineno, $1.size, line.strip)
 	elsif line =~ /^(\s*)([A-Z_]+)\s*=/
 	  # Constants.
-	  add_name($2, lineno, $1.size, line.strip)
+	  add_name(:symbol, $2, lineno, $1.size, line.strip)
 	end
 	lineno += 1
       end
     end
+  end
+
+  # Read the Crystal source file and parse it using the compiler's
+  # parser/visitor library.
+  def parse_crystal_file
+    content = File.read(@filename)
+    visitor = Visitor.new(@filename, content, self)
+    parser = Crystal::Parser.new(content)
+    parser.filename = filename
+    node = parser.parse
+    node.accept(visitor)
   end
 
   def dprint(s : String)
@@ -176,21 +390,21 @@ class FileDefs
 
   # If this is a one-liner class definition, add it to the permanent record of names.
   # Otherwise push it on the stack, so that we can handle nested classes.
-  def add_class(name : String, indent : Int32, lineno : Int32, column : Int32,
+  def add_class(type : Symbol, name : String, indent : Int32, lineno : Int32, column : Int32,
 		context : String, one_line = false)
-    dprint "add_class: name #{name}, indent #{indent}, lineno #{lineno}, one_line #{one_line}"
+    dprint "add_class: type #{type}, name #{name}, indent #{indent}, lineno #{lineno}, one_line #{one_line}"
     full_name = (class_stack.map {|d| d.name} + [name]).join(".")
     unless one_line
-      class_stack.push (Def.new(name, lineno, indent, context))
+      class_stack.push (Def.new(:class, name, lineno, indent, context))
     end
-    records.push (Def.new(full_name, lineno, column, context))
+    records.push (Def.new(type, full_name, lineno, column, context))
   end
 
   # Add a name to the permanent record of names.
-  def add_name(name : String, lineno : Int32, column : Int32, context : String)
+  def add_name(type : Symbol, name : String, lineno : Int32, column : Int32, context : String)
     dprint "add_name: name #{name}, lineno #{lineno}"
     full_name = (class_stack.map {|d| d.name} + [name]).join(".")
-    records.push (Def.new(full_name, lineno, column, context))
+    records.push (Def.new(type, full_name, lineno, column, context))
   end
 
   # Pop the most recent class definition after seeing an "end" statement
@@ -206,7 +420,8 @@ class FileDefs
   def print(f : IO)
     dprint "FileDefs.print"
     records.each do |r|
-      f.puts "#{r.name}|#{@filename}:#{r.lineno}:#{r.indent+1}|#{r.context}"
+      f.puts [TYPES[r.type], r.name, "#{@filename}:#{r.lineno}:#{r.indent+1}",
+	      r.context].join("#")
     end
   end
 end
@@ -257,7 +472,11 @@ class Index
     filenames.each do |filename|
       puts "parsing #{filename}" if debug
       fdef = FileDefs.new(filename, debug, tabsize)
-      fdef.parse_file
+      if filename =~ /\.cr/
+	fdef.parse_crystal_file
+      else
+	fdef.parse_ruby_file
+      end
       fdef.print(STDOUT) if debug
       add_file(fdef)
     end
@@ -266,10 +485,12 @@ class Index
   def read_database(infile : String)
     File.open(infile, "r") do |f|
       f.each_line(chomp: true) do |line|
-        splits = line.split("|")
-	name = splits[0]
-	file = splits[1]
-	context = splits[2]
+        splits = line.split("#")
+	kind = splits[0]
+	type = FileDefs::TYPES.key_for?(kind) || :symbol
+	name = splits[1]
+	file = splits[2]
+	context = splits[3]
 
 	file_splits = file.split(":")
 	filename = file_splits[0]
@@ -279,7 +500,7 @@ class Index
 	  fdef = FileDefs.new(filename, debug, tabsize)
 	  fdefs[filename] = fdef
 	end
-	fdef.records.push(FileDefs::Def.new(name, lineno, indent, context))
+	fdef.records.push(FileDefs::Def.new(type, name, lineno, indent, context))
       end
     end
   end
@@ -307,6 +528,10 @@ class Index
     secondary_results = [] of Result
     fdefs.each do |filename, fdef|
       fdef.records.each do |r|
+        # End records are real symbols; they're just the marker
+	# for the end of a method, so skip them.
+        next if r.type == :end
+
         rname = @ignore_case ? r.name.downcase : r.name
 	if partial_match
 	  # partial_match means the name in the symbol table only has to start
