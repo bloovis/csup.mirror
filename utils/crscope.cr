@@ -31,6 +31,19 @@ class Config
   end
 end
 
+# Search types in crscope have the same integer values as search types in cscope.
+
+SEARCH_TYPES = {
+  :symbol   => 0,	# Find this Crystal symbol
+  :function => 1,	# Find this function definition
+  :calledby => 2,	# Find functions called by this function
+  :calling  => 3,	# Find functions calling this function
+  :text     => 4,	# Find this text string (non-regexp)
+  :grep     => 6,	# Find this grep -E pattern
+  :file     => 7,	# Find this file
+  :assign   => 9,	# Find assignments to this symbol
+}
+
 class String
   # Calculate display length, taking into account the size of a tab.
   def display_size(tabsize = 8)
@@ -432,17 +445,10 @@ end
 class Entry
   property prompt : String	# prompt string
   property row : Int32		# line number on screen
-  property type : Int32		# 0, 1, 6, or 7
+  property type : Symbol	# key to SEARCH_TYPES
   property buf : String		# entry buffer
   property leftcol : Int32 	# starting column for entry
   property fillcols : Int32	# number of columns to right of prompt
-
-  # Values for type.
-  TYPE_SYMBOL   = 0	# Find this Crystal symbol
-  TYPE_FUNCTION = 1	# Find this function definition
-  TYPE_SEARCH   = 4	# Find this text string (non-regexp)
-  TYPE_GREP     = 6	# Find this grep -E pattern
-  TYPE_FILE     = 7	# Find this file
 
   def initialize(@prompt, @row, @type)
     @buf = ""
@@ -454,7 +460,7 @@ class Entry
 end
 
 class Index
-  property fdefs = Hash(String, FileDefs).new	# indexed by filelname
+  property fdefs = Hash(String, FileDefs).new	# indexed by filename
   property debug = false
   property tabsize = 8
   property nrows = 0		# total number of lines in terminal window
@@ -523,22 +529,40 @@ class Index
     end
   end
 
-  def search(name : String, func_def = false, partial_match = false) : Array(Result)
+  def search(name : String, search_type : Symbol, partial_match = false) : Array(Result)
     if @ignore_case
       name = name.downcase
     end
-    primary_results = [] of Result
-    secondary_results = [] of Result
+    results = [] of Result
     fdefs.each do |filename, fdef|
+      in_method = false
       fdef.records.each do |r|
-        # End records are real symbols; they're just the marker
+        # If we are searching for methods called by a named method,
+	# and we're in that method:
+	# - save calls in the results
+	# - ignore all other symbols
+	if search_type == :calledby && in_method
+	  if r.type == :call
+	    results.push(Result.new(filename, r.name, r.lineno,r.context))
+	  elsif r.type == :end
+	    in_method = false
+	  end
+	  next
+        end
+
+        # End records aren't "real" symbols; they're just the marker
 	# for the end of a method, so skip them.
-        next if r.type == :end
+	if r.type == :end
+	  in_method = false
+	  next
+	end
 
 	# If searching for a function definition, ignore
 	# any non-def records.
-	next if func_def && (r.type != :def)
+	next if search_type == :function && r.type != :def
 
+	# See if this record matches the provided name.
+	found_name = nil
         rname = @ignore_case ? r.name.downcase : r.name
 	if partial_match
 	  # partial_match means the name in the symbol table only has to start
@@ -546,20 +570,20 @@ class Index
 	  if @qualified
 	    # We must include any classname qualifications in the match.
 	    if rname.starts_with?(name)
-	      primary_results.push(Result.new(filename, r.name, r.lineno,r.context))
+	      found_name = r.name
 	    end
 	  else
 	    # We can ignore any or all classname qualifications in the match.
 	    regexp = Regex.new("^.*[.]?(#{name}[^\.]*)$")
 	    match = regexp.match(rname)
 	    if match && match[1]?
-	      secondary_results.push(Result.new(filename, match[1], r.lineno,r.context))
+	      found_name = match[1]
 	    end
 	  end
         elsif @qualified
 	  if rname == name
 	    # @qualfied means the names must be identical.
-	    primary_results.push(Result.new(filename, r.name, r.lineno,r.context))
+	    found_name = r.name
 	  end
 	else
 	  # @qualified is false, which means the name being searched doesn't need to match
@@ -567,12 +591,33 @@ class Index
 	  regexp = Regex.new("(^|\\.)#{name}$")
 	  match = regexp.match(rname)
 	  if match
-	    secondary_results.push(Result.new(filename, r.name, r.lineno,r.context))
+	    found_name = r.name
 	  end
+	end
+
+	# There is a match.  If this is an ordinary symbol or method search,
+	# add the record to the results.  If this is a search for methods
+	# called by the named method, set the flag indicating that we must
+	# collect calls until the end of the method is seen.
+	next unless found_name
+	if search_type == :calledby
+	  if r.type == :def
+	    in_method = true
+	  end
+	elsif search_type == :calling
+	  if r.type == :call
+	    results.push(Result.new(filename, found_name, r.lineno,r.context))
+	  end
+	elsif search_type == :assign
+	  if r.type == :assign
+	    results.push(Result.new(filename, found_name, r.lineno,r.context))
+	  end
+	else
+	  results.push(Result.new(filename, found_name, r.lineno,r.context))
 	end
       end
     end
-    return primary_results + secondary_results
+    return results
   end
 
   def grepsearch(name : String, fixed = false) : Array(Result)
@@ -627,19 +672,17 @@ class Index
       STDOUT.flush
       line = STDIN.gets
       return if line.nil?
-      search_type = line[0].to_i
+      search_type = SEARCH_TYPES.key_for?(line[0].to_i) || :symbol
       search_term = line[1..]
       results = [] of Result
       case search_type
-      when Entry::TYPE_SYMBOL
-        results = search(search_term, func_def: false)
-      when Entry::TYPE_FUNCTION
-        results = search(search_term, func_def: true)
-      when Entry::TYPE_SEARCH
+      when :symbol, :function
+        results = search(search_term, search_type)
+      when :text
 	results = grepsearch(search_term, true)
-      when Entry::TYPE_GREP
+      when :grep
 	results = grepsearch(search_term, false)
-      when Entry::TYPE_FILE
+      when :file
 	results = filesearch(search_term)
       else
 	puts "Unknown search type #{search_type}"
@@ -715,15 +758,13 @@ class Index
     results = [] of Result
     s = entry.buf
     case entry.type
-    when Entry::TYPE_SYMBOL
-      results = search(s, func_def: false, partial_match: partial_match)
-    when Entry::TYPE_FUNCTION
-      results = search(s, func_def: true, partial_match: partial_match)
-    when Entry::TYPE_SEARCH
+    when :symbol, :function, :calling, :calledby, :assign
+      results = search(s, entry.type, partial_match: partial_match)
+    when :text
       results = grepsearch(s, true)
-    when Entry::TYPE_GREP
+    when :grep
       results = grepsearch(s, false)
-    when Entry::TYPE_FILE
+    when :file
       results = filesearch(s)
     end
     return results
@@ -743,15 +784,13 @@ class Index
       Ncurses.curs_set 1
       #Ncurses.mvaddstr 0, 0, "Editor returned #{success}"
     else
-      Ncurses.mvaddstr 0, 0, "Environment variable EDITOR not defined!"
-      Ncurses.clrtoeol
+      show_status("Environment variable EDITOR not defined!")
     end
   end
 
   def show_status(s : String)
-    Ncurses.move(0, 0)
+    Ncurses.mvaddstr(0, 0, s)
     Ncurses.clrtoeol
-    Ncurses.mvaddstr(0,0, s)
   end
     
   def toggle_ignore_case
@@ -910,7 +949,7 @@ class Index
         e.buf = ""
 	pos = 0
       when "?"
-        if e.type != Entry::TYPE_GREP
+        if e.type != :grep
 	  suffix = yield
 	  e.buf = e.buf.insert(pos, suffix)
 	  pos += suffix.size
@@ -937,11 +976,14 @@ class Index
     # Add the four entry fields.
     entries = [] of Entry
     row = @nrows - 1
-    entries.push Entry.new("Find this symbol:",  row-4, Entry::TYPE_SYMBOL)
-    entries.push Entry.new("Find this method:",  row-3, Entry::TYPE_FUNCTION)
-    entries.push Entry.new("Regexp search:",     row-2, Entry::TYPE_GREP)
-    entries.push Entry.new("Non-regexp search:", row-1, Entry::TYPE_SEARCH)
-    entries.push Entry.new("File search:",       row,   Entry::TYPE_FILE)
+    entries.push Entry.new("Find this symbol:",  row-7, :symbol)
+    entries.push Entry.new("Find this method:",  row-6, :function)
+    entries.push Entry.new("Find calls by this method:", row-5, :calledby)
+    entries.push Entry.new("Find calls to this method:", row-4, :calling)
+    entries.push Entry.new("Regexp search:",     row-3, :grep)
+    entries.push Entry.new("Non-regexp search:", row-2, :text)
+    entries.push Entry.new("File search:",       row-1, :file)
+    entries.push Entry.new("Find assignments to this symbol:", row, :assign)
     @result_rows = @nrows - entries.size - 3	# leave room for status line, blank line, and prompt line
 
     entry_number = 0
@@ -962,7 +1004,7 @@ class Index
 	prefix = s
 	suffix = ""
 	longest = s
-	if @results.size > 0 && entry.type != Entry::TYPE_FILE
+	if @results.size > 0 && entry.type != :file
 	  longest = ""
 	  @results.each do |r|
 	    name = r.name
@@ -1014,7 +1056,7 @@ class Index
 	    done = true
 	  end
 	else
-	  Ncurses.mvaddstr 0, 0, "Could not find #{entry.buf}"
+	  show_status "Could not find #{entry.buf}"
 	end
       when "C-i"
         if @results.size > 0
