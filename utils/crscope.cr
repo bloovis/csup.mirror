@@ -31,19 +31,6 @@ class Config
   end
 end
 
-# Search types in crscope have the same integer values as search types in cscope.
-
-SEARCH_TYPES = {
-  :symbol   => 0,	# Find this Crystal symbol
-  :function => 1,	# Find this function definition
-  :calledby => 2,	# Find functions called by this function
-  :calling  => 3,	# Find functions calling this function
-  :text     => 4,	# Find this text string (non-regexp)
-  :grep     => 6,	# Find this grep -E pattern
-  :file     => 7,	# Find this file
-  :assign   => 9,	# Find assignments to this symbol
-}
-
 class String
   # Calculate display length, taking into account the size of a tab.
   def display_size(tabsize = 8)
@@ -96,9 +83,9 @@ class Result
 end
 
 # Class used to record all name definitions for a single file.
-class FileDefs
+class FileRecords
 
-  TYPES = {
+  RECORD_TYPES = {
     :class  => "C",
     :module => "M",
     :def    => "D",
@@ -113,7 +100,7 @@ class FileDefs
   }
 
   # Class used to record a name definition.
-  class Def
+  class Record
     property type : Symbol
     property name : String
     property lineno : Int32
@@ -121,7 +108,7 @@ class FileDefs
     property context : String
 
     def initialize(@type, @name, @lineno, @indent, @context)
-      #puts "Def.initialize #{@type},#{@name},#{@lineno},#{@indent},#{@context}"
+      #puts "Record.initialize #{@type},#{@name},#{@lineno},#{@indent},#{@context}"
     end
   end
 
@@ -132,7 +119,7 @@ class FileDefs
     @content : String
     @scope : Array(String)
     @defs : Array(String)
-    @fdefs : FileDefs
+    @fdefs : FileRecords
 
     def initialize(@filename, @content, @fdefs)
       @scope = [] of String
@@ -146,7 +133,7 @@ class FileDefs
       context = get_context(node)
       @fdefs.add_name(type, name, lineno, column, context)
       #puts [type, name, location, context].join("#")
-      #puts "key for #{type} is #{TYPES.key_for?(type)}"
+      #puts "key for #{type} is #{RECORD_TYPES.key_for?(type)}"
       return name.to_s
     end
 
@@ -157,7 +144,7 @@ class FileDefs
       context = get_context(node)
       @fdefs.add_name(type, name, lineno, column, context)
       #puts [type, name, location, context].join("#")
-      #puts "key for #{type} is #{TYPES.key_for?(type)}"
+      #puts "key for #{type} is #{RECORD_TYPES.key_for?(type)}"
       return name.to_s
     end
 
@@ -169,7 +156,7 @@ class FileDefs
       context = get_context(node)
       @fdefs.add_name(type, name, lineno, column, context)
       #puts [type, names, location, context].join("#")
-      #puts "key for #{type} is #{TYPES.key_for?(type)}"
+      #puts "key for #{type} is #{RECORD_TYPES.key_for?(type)}"
       return names
     end
       
@@ -315,10 +302,10 @@ class FileDefs
   property filename = ""
 
   # Ephemeral stack of modules and classes, used only during parsing.
-  property class_stack = [] of Def
+  property class_stack = [] of Record
 
   # Permanent record of definitions, using fully qualified names.
-  property records = [] of Def
+  property records = [] of Record
 
   property debug = false
   property tabsize = 8
@@ -330,7 +317,7 @@ class FileDefs
   # definitions of classes, modules, C libraries and functions,
   # aliases, methods, and constants.
   def parse_ruby_file
-    dprint "FileDefs.parse_file: filename #{@filename}, tabsize #{@tabsize}"
+    dprint "FileRecords.parse_file: filename #{@filename}, tabsize #{@tabsize}"
     File.open(@filename) do |f|
       lineno = 1
       f.each_line(chomp: true) do |line|
@@ -410,16 +397,16 @@ class FileDefs
     dprint "add_class: type #{type}, name #{name}, indent #{indent}, lineno #{lineno}, one_line #{one_line}"
     full_name = (class_stack.map {|d| d.name} + [name]).join(".")
     unless one_line
-      class_stack.push (Def.new(:class, name, lineno, indent, context))
+      class_stack.push (Record.new(:class, name, lineno, indent, context))
     end
-    records.push (Def.new(type, full_name, lineno, column, context))
+    records.push (Record.new(type, full_name, lineno, column, context))
   end
 
   # Add a name to the permanent record of names.
   def add_name(type : Symbol, name : String, lineno : Int32, column : Int32, context : String)
     dprint "add_name: name #{name}, lineno #{lineno}"
     full_name = (class_stack.map {|d| d.name} + [name]).join(".")
-    records.push (Def.new(type, full_name, lineno, column, context))
+    records.push (Record.new(type, full_name, lineno, column, context))
   end
 
   # Pop the most recent class definition after seeing an "end" statement
@@ -433,9 +420,9 @@ class FileDefs
   end
 
   def print(f : IO)
-    dprint "FileDefs.print"
+    dprint "FileRecords.print"
     records.each do |r|
-      f.puts [TYPES[r.type], r.name, "#{@filename}:#{r.lineno}:#{r.indent+1}",
+      f.puts [RECORD_TYPES[r.type], r.name, "#{@filename}:#{r.lineno}:#{r.indent+1}",
 	      r.context].join("#")
     end
   end
@@ -460,7 +447,19 @@ class Entry
 end
 
 class Index
-  property fdefs = Hash(String, FileDefs).new	# indexed by filename
+  # Search types in crscope have the same integer values as search types in cscope.
+  SEARCH_TYPES = {
+    :symbol   => 0,	# Find this Crystal symbol
+    :function => 1,	# Find this function definition
+    :calledby => 2,	# Find functions called by this function
+    :calling  => 3,	# Find functions calling this function
+    :text     => 4,	# Find this text string (non-regexp)
+    :grep     => 6,	# Find this grep -E pattern
+    :file     => 7,	# Find this file
+    :assign   => 9,	# Find assignments to this symbol
+  }
+
+  property fdefs = Hash(String, FileRecords).new	# indexed by filename
   property debug = false
   property tabsize = 8
   property nrows = 0		# total number of lines in terminal window
@@ -472,7 +471,7 @@ class Index
   def initialize(@debug, @tabsize)
   end
 
-  def add_file(f : FileDefs)
+  def add_file(f : FileRecords)
     fdefs[f.filename] = f
     #puts "Index.add_file #{f.filename}"
   end
@@ -480,7 +479,7 @@ class Index
   def parse_files(filenames : Array(String))
     filenames.each do |filename|
       puts "parsing #{filename}" if debug
-      fdef = FileDefs.new(filename, debug, tabsize)
+      fdef = FileRecords.new(filename, debug, tabsize)
       if filename =~ /\.cr/
 	fdef.parse_crystal_file
       else
@@ -496,7 +495,7 @@ class Index
       f.each_line(chomp: true) do |line|
         splits = line.split("#")
 	kind = splits[0]
-	type = FileDefs::TYPES.key_for?(kind) || :symbol
+	type = FileRecords::RECORD_TYPES.key_for?(kind) || :symbol
 	name = splits[1]
 	file = splits[2]
 	context = splits[3]
@@ -506,10 +505,10 @@ class Index
 	lineno = file_splits[1].to_i
 	indent = file_splits[2].to_i - 1
 	unless fdef = fdefs[filename]?
-	  fdef = FileDefs.new(filename, debug, tabsize)
+	  fdef = FileRecords.new(filename, debug, tabsize)
 	  fdefs[filename] = fdef
 	end
-	fdef.records.push(FileDefs::Def.new(type, name, lineno, indent, context))
+	fdef.records.push(FileRecords::Record.new(type, name, lineno, indent, context))
       end
     end
   end
@@ -543,7 +542,7 @@ class Index
 	# - ignore all other symbols
 	if search_type == :calledby && in_method
 	  if r.type == :call
-	    results.push(Result.new(filename, r.name, r.lineno,r.context))
+	    results.push(Result.new(filename, r.name, r.lineno, r.context))
 	  elsif r.type == :end
 	    in_method = false
 	  end
