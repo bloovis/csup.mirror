@@ -235,7 +235,10 @@ class FileDefs
     end
 
     def visit(node : Crystal::Call)
-      unscoped_single_name(:call, node)
+      # Don't bother recording operator calls like + or == .
+      if node.name =~ /^[@_A-Za-z0-9]+$/
+	unscoped_single_name(:call, node)
+      end
 
       #puts "visit(call): name #{node.name}, scope #{@scope.join('.')}"
       #location = node.location
