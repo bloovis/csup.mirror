@@ -9,10 +9,9 @@
 #
 # The four search types that crscope implements are:
 #
-# 0 - Find all (possibly inexact) matches for a method.  Thus,
-#     searching for "print" will find "Class1.print", "Class2.print", etc.
-# 1 - Find exact match for a method.  This requires that you enter a
-#     fully-qualified name, where "." separates all class names.
+# 0 - Find any symbol
+# 1 - Find a method definition
+# 4 - Find a string (non-regexp)
 # 6 - Perform an egrep search.
 # 7 - Perform a file search.
 #
@@ -439,11 +438,11 @@ class Entry
   property fillcols : Int32	# number of columns to right of prompt
 
   # Values for type.
-  TYPE_INEXACT = 0
-  TYPE_EXACT   = 1
-  TYPE_SEARCH  = 4
-  TYPE_GREP    = 6
-  TYPE_FILE    = 7
+  TYPE_SYMBOL   = 0	# Find this Crystal symbol
+  TYPE_FUNCTION = 1	# Find this function definition
+  TYPE_SEARCH   = 4	# Find this text string (non-regexp)
+  TYPE_GREP     = 6	# Find this grep -E pattern
+  TYPE_FILE     = 7	# Find this file
 
   def initialize(@prompt, @row, @type)
     @buf = ""
@@ -462,6 +461,7 @@ class Index
   property result_rows = 0 	# space for results at top of screen
   property results = [] of Result
   property ignore_case = false
+  property qualified = false
 
   def initialize(@debug, @tabsize)
   end
@@ -523,7 +523,7 @@ class Index
     end
   end
 
-  def search(name : String, exact_match = false, partial_match = false) : Array(Result)
+  def search(name : String, func_def = false, partial_match = false) : Array(Result)
     if @ignore_case
       name = name.downcase
     end
@@ -535,11 +535,15 @@ class Index
 	# for the end of a method, so skip them.
         next if r.type == :end
 
+	# If searching for a function definition, ignore
+	# any non-def records.
+	next if func_def && (r.type != :def)
+
         rname = @ignore_case ? r.name.downcase : r.name
 	if partial_match
 	  # partial_match means the name in the symbol table only has to start
 	  # with the name being searched, i.e., not match it entirely.
-	  if exact_match
+	  if @qualified
 	    # We must include any classname qualifications in the match.
 	    if rname.starts_with?(name)
 	      primary_results.push(Result.new(filename, r.name, r.lineno,r.context))
@@ -552,13 +556,13 @@ class Index
 	      secondary_results.push(Result.new(filename, match[1], r.lineno,r.context))
 	    end
 	  end
-        elsif exact_match
+        elsif @qualified
 	  if rname == name
-	    # exact_match means the names must be identical.
+	    # @qualfied means the names must be identical.
 	    primary_results.push(Result.new(filename, r.name, r.lineno,r.context))
 	  end
 	else
-	  # exact_match is false, which means the name being searched doesn't need to match
+	  # @qualified is false, which means the name being searched doesn't need to match
 	  # any of the class name qualifications of the name in the symbol table.
 	  regexp = Regex.new("(^|\\.)#{name}$")
 	  match = regexp.match(rname)
@@ -627,10 +631,10 @@ class Index
       search_term = line[1..]
       results = [] of Result
       case search_type
-      when Entry::TYPE_INEXACT
-        results = search(search_term, exact_match: false)
-      when Entry::TYPE_EXACT
-        results = search(search_term, exact_match: true)
+      when Entry::TYPE_SYMBOL
+        results = search(search_term, func_def: false)
+      when Entry::TYPE_FUNCTION
+        results = search(search_term, func_def: true)
       when Entry::TYPE_SEARCH
 	results = grepsearch(search_term, true)
       when Entry::TYPE_GREP
@@ -706,15 +710,15 @@ class Index
     return shown
   end
 
-  # Perform a search appropriate for this entry's type (exact, inexact, regexp, file).
+  # Perform a search appropriate for this entry's type (function, regexp, file).
   def entry_search(entry : Entry, partial_match = false) : Array(Result)
     results = [] of Result
     s = entry.buf
     case entry.type
-    when Entry::TYPE_INEXACT
-      results = search(s, exact_match: false, partial_match: partial_match)
-    when Entry::TYPE_EXACT
-      results = search(s, exact_match: true, partial_match: partial_match)
+    when Entry::TYPE_SYMBOL
+      results = search(s, func_def: false, partial_match: partial_match)
+    when Entry::TYPE_FUNCTION
+      results = search(s, func_def: true, partial_match: partial_match)
     when Entry::TYPE_SEARCH
       results = grepsearch(s, true)
     when Entry::TYPE_GREP
@@ -755,6 +759,11 @@ class Index
     show_status("Caseless mode is now " + (@ignore_case ? "ON" : "OFF"))
   end
 
+  def toggle_qualified
+    @qualified = ! @qualified
+    show_status("Qualified mode is now " + (@qualified ? "ON" : "OFF"))
+  end
+
   # Move the cursor to the results at the top of the screen
   # and allow the user to select a result, which will
   # invoke $EDITOR on the selected file and line.
@@ -792,6 +801,8 @@ class Index
 	reload = true
       when "C-c"
         toggle_ignore_case
+      when "C-q"
+	toggle_qualified
       when "C-h"
         if offset > 0
 	  offset = [offset - @result_rows, 0].max
@@ -868,6 +879,8 @@ class Index
         pos = 0
       when "C-c"
 	toggle_ignore_case
+      when "C-q"
+	toggle_qualified
       when "C-e"
         pos = e.buf.size
       when "Left", "C-b"
@@ -924,11 +937,11 @@ class Index
     # Add the four entry fields.
     entries = [] of Entry
     row = @nrows - 1
-    entries.push Entry.new("Inexact name search:", row-4, Entry::TYPE_INEXACT)
-    entries.push Entry.new("Exact name search:",   row-3, Entry::TYPE_EXACT)
-    entries.push Entry.new("Regexp search:",       row-2, Entry::TYPE_GREP)
-    entries.push Entry.new("Non-regexp search:",   row-1, Entry::TYPE_SEARCH)
-    entries.push Entry.new("File search:",         row,   Entry::TYPE_FILE)
+    entries.push Entry.new("Find this symbol:",  row-4, Entry::TYPE_SYMBOL)
+    entries.push Entry.new("Find this method:",  row-3, Entry::TYPE_FUNCTION)
+    entries.push Entry.new("Regexp search:",     row-2, Entry::TYPE_GREP)
+    entries.push Entry.new("Non-regexp search:", row-1, Entry::TYPE_SEARCH)
+    entries.push Entry.new("File search:",       row,   Entry::TYPE_FILE)
     @result_rows = @nrows - entries.size - 3	# leave room for status line, blank line, and prompt line
 
     entry_number = 0
@@ -973,7 +986,7 @@ class Index
       # How we handle the entry depends on what the the user hit
       # to end it.
       # Tab - display partial matches
-      # Enter - display inexact or exact matches
+      # Enter - display matches
       case c
       when "C-d"
 	done = true
