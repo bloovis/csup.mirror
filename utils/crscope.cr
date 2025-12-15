@@ -948,10 +948,14 @@ class Index
         e.buf = ""
 	pos = 0
       when "?"
-        if e.type != :grep
+        if e.type == :symbol || e.type == :function ||
+	   e.type == :calledby || e.type == :calling
 	  suffix = yield
 	  e.buf = e.buf.insert(pos, suffix)
 	  pos += suffix.size
+	else
+	  e.buf = e.buf.insert(pos, c)
+	  pos += 1
 	end
       when "C-m", "C-d", "Up", "Down", "C-g", "C-n", "C-p", "C-i"
         return c
