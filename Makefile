@@ -4,7 +4,7 @@
 	crystal build --no-color --error-trace -D TEST $<
 
 % : utils/%.cr
-	crystal build --no-color --error-trace -D TEST $<
+	crystal build --no-color --error-trace $<
 
 csup : $(wildcard src/*.cr) $(wildcard src/modes/*.cr)
 	./get_version.rb
