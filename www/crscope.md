@@ -4,40 +4,34 @@ Crscope is a source code browsing tool
 for Crystal and Ruby.  It is a partial reimplementation of
 [cscope](https://cscope.sourceforge.net/), the venerable source code browing tool for C.
 
-Crscope has only the features I needed for use in
-my MicroEMACS variant: the ability to find the definitions of:
+Crscope uses different parsing strategies for Crystal and Ruby:
 
-* methods (`def`)
-* classes (`class`)
-* modules (`module`)
-* constants (UPPER_CASE_NAMES = ...)
-* libraries (`lib`)
+* For Crystal, crscope uses the compiler's own parser.  It records information
+about classes, modules, methods, libraries, C functions, method calls, and assignments.
 
-Crscope uses rough heuristics to find these things, and doesn't attempt to do a full parse or to find
-all uses of a symbol.  These heuristics involve the use of regular expressions,
-and assumptions about the indentation of blocks.  In particular, the indentation of
-`end` must match that of the opening `class`, `def`, etc., except
-in the case of one-liner class and method definitions, with `end` on
-the same line.
+For Ruby, crscope uses uses rough heuristics, making heavy
+use of regular expressions and the indentation level of lines of code.
+It records less information than the Crystal parser: classes, modules, methods,
+and constants.
 
 Like cscope, crscope can also search for files, using a partial match of the term you enter, and
 can also search using regular expressions.
 
-Crscope attempts to define method and class names using a qualified
+Crscope records information about method and class names using a qualified
 syntax of the form `Class1.Class2[...].MethodName`, where nested
 classes are separated with periods.  This is slightly different from
-the scoping syntax used in Crystal, but it allows for a consistent and
+the scoping syntax used in Crystal and Ruby, but it allows for a consistent and
 simple naming scheme.
 
-## How crscope is different from cscope
+## New features
 
 Crscope has several features that are missing in cscope:
 
 * **Completions**:  If you
-press ?  while entering a search field, crscope will display a list of
+press `?`  while entering a symbol search field, crscope will display a list of
 possible names, and will also insert as many characters as necessary
 to give the longest possible match.  Completions are *not* allowed
-for regular expression searches.
+for non-symbol searches.
 
 * **Search fields editing**: You can use EMACS-style keys for editing
 search fields, such as `C-a` for beginning of line, `C-e` for end of line, etc.
@@ -48,19 +42,13 @@ do a search, which allows you to edit them after a search.
 go forward in the search results by hitting Space.  In crscope, you can also
 go back by hitting Backspace.
 
-Crscope's search types are more limited than cscope's:
-
-* **Inexact name search**: Use this to find a name without having to specify
-  its class or module qualifications.  For example, search for `initialize`
-  to find all methods called `initialize`, regardless of enclosing class.
-* **Exact name search**: Use this to find a fully-qualified name.  For example,
-  search for `Class1.initialize` to find the `initialize` method in the
-  class `Class1`.
-* **Regexp search**: Use this to perform an egrep (grep -E) search.  This
-  is useful for finding all occurrences of a particular method, since
-  crscope doesn't do that in its name searches.
-* **File search**: Use this to search for all filenames containing the specified string.
-  This is handy if you can't remember the exact name or full path for a particular file.
+* **Qualified or unqualified matches**. In crscope, you can search for
+symbol names using an unqualified name, i.e., a name without the namespace
+qualifications.  For example, you can find the `initialize` function in the
+`MyClass` class (and any other class), by simply searching for `initialize`.
+But you can also enable qualified matches, which requires you to enter
+the fully qualified name, such as `MyClass.initialize`.  Use the key `C-q`
+(Ctrl + Q) to toggle qualified matches.
 
 ## Curses-based interface
 
@@ -80,17 +68,46 @@ Switch between the two sections using the Tab (`C-i`) key.
 In each section, you can move from one line to another using
 the Down, Up, `C-n`, and `C-p` keys.
 
-In the search results section, hit the Enter key to run your editor on
+In the search entry fields, you can use EMACS-style editing keys.  In symbol
+searches, hit the `?` key to show partial matches in the search results,
+or hit `Enter` to perform a more precise search.
+
+In the search results section, hit the `Enter` key to run your editor on
 the selected file and jump to the selected line number.  You can also
 type the letter shown on the left column to run the editor on that file and line.
-
-In the search entry fields, you can use EMACS-style editing keys.  Hit
-the ? key to show possible matches in the search results, or hit Enter to perform a
-more precise search.
 
 Press `C-d` at any point to quit.
 
 Press `C-c` at any point to toggle the "ignore case" flag.
+
+Press `C-q` at any point to toggle the "qualified match" flag.
+
+Crscope's search types are similar to those in cscope, but differ slightly in some ways.
+
+* **Find this symbol**: Search for a symbol, which may be a library, class, method definition,
+method call, C function, or the target of an assignment.
+
+* **Find this method**: Search for a method definition.
+
+* **Find calls by this method**: Search for all calls made by a method.
+
+* **Find calls to this method**: Search for all calls to a method.  Operator
+methods like `+` are *not* displayed.
+
+* **Regexp search**: Perform a regular expression (`grep -E`) search.  This
+  is useful for finding all occurrences of a particular symbol that
+  crscope wouldn't find with its "find this symbol" search, such as
+  a parameter name.
+
+* **Non-regexp search**: Perform a fixed-string (`grep -F`) search.  This
+  is useful for finding arbitrary strings, or strings that include
+  regular expression metacharacters like `[` or `?`, or symbols that contain
+  the `?` character.
+
+* **File search**: Search for all filenames containing the specified string.
+  This is handy if you can't remember the exact name or full path for a particular file.
+
+* **Find assignments to this symbol**: Search for assignments to a particular symbol.
 
 ## Line-oriented interface
 
@@ -144,7 +161,7 @@ Each line contains four fields, separated by a space:
 * Line number
 * Context (the line where the symbol is defined)
 
-Press `C-d` (Control-D) at the prompt to quit.
+Press `C-d` (Ctrl-D) at the prompt to quit.
 
 ## Files
 
