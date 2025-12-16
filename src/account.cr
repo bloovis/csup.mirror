@@ -5,6 +5,15 @@ require "./supcurses"
 
 module Redwood
 
+# `Account` contains the information about a single email ccount.
+# It includes SMTP server information, and also the SMTP2GO API key if
+# the SMTP2GO service is used instead of normal SMTP. The `Account`
+# constructor extracts this information from the `Config` object, which
+# is in turn derived from the file `~/.csup/config.yaml`.
+#
+# `Account` also includes `sendmail` and `gpgkey` properties,
+# for compatibility with `sup`, but `csup` does not use these
+# currently, and will probably never use them.
 class Account < Person
   property sendmail : String
   property signature : String
@@ -26,13 +35,14 @@ class Account < Person
     end
   end
 
+  # Initializes an `Account` object with information from a `Config::Account` object.
   def initialize(h : Config::Account)
     raise ArgumentError.new("no name for account") unless h["name"]?
     raise ArgumentError.new("no email for account") unless h["email"]?
     super h["name"], h["email"]
-    @sendmail = cfg_string(h, "sendmail")		# not used, but here for Sup compatibility
+    @sendmail = cfg_string(h, "sendmail")	# not used, but here for Sup compatibility
     @signature = cfg_string(h, "signature")
-    @gpgkey = cfg_string(h, "gpgkey")
+    @gpgkey = cfg_string(h, "gpgkey")		# not used, but here for Sup compatibility
     @smtp_server = cfg_string(h, "smtp_server")
     if h["smtp_port"]?
       @smtp_port = h["smtp_port"].as(String).to_i
@@ -45,18 +55,10 @@ class Account < Person
     @smtp2go_api_key = cfg_string(h, "smtp2go_api_key")
   end
 
-  # Default sendmail command for bouncing mail,
-  # deduced from #sendmail
-  def bounce_sendmail
-    @sendmail.sub(/\s(\-(ti|it|t))\b/) do |match|
-      case $1
-      when "-t" then ""
-      else " -i"
-      end
-    end
-  end
 end
 
+# `Account_Manager` is a singleton class that stores information about all email accounts
+# described in the file `~/.csup/config.yaml`.
 class AccountManager
   singleton_class
 
@@ -65,11 +67,11 @@ class AccountManager
   @accounts = Hash(Account, Bool).new
   @default_account : Account?
 
+  # Creates a list of all accounts described in the file `~/.csup/config.yaml`.
+  # It creates information for the "default" account first, then all of
+  # other accounts (if any).
   def initialize(accounts : Config::Accounts)
     singleton_pre_init
-    #@email_map = Hash(String, Account)
-    #@accounts = Hash(Account, Bool)
-    #@regexen = {}
     @default_account = nil
 
     add_account accounts["default"], true
@@ -77,18 +79,19 @@ class AccountManager
     singleton_post_init
   end
 
-  # This doesn't seem to be used anywhere.
-#  def user_accounts : Array(Config::Account)
-#    @accounts.keys
-#  end
-  
+  # Returns a list of all email addresses that have associated `Account` objects.
   def user_emails : Array(String)
-    @email_map.keys # .select { |e| String === e }
+    @email_map.keys
   end
   singleton_method user_emails
 
-  ## must be called first with the default account. fills in missing
-  ## values from the default account.
+  # Adds a new email account to the account list.  It must be called first with the
+  # default account. For subsequent accounts, it fills in missing (optional) values from the
+  # default account.  These optional values are `name`, `sendmail`, `signature`,
+  # and `gpgkey`. `sendmail` and `gpgkey` are not used in csup, but are present
+  # for compatibility with sup.  An email account can have several alternative
+  # email address, so `add_account` maintains a hash (`email_map`) that maps
+  # an email address to its associated `Account` object.
   def add_account(hash : Config::Account, default=false)
     raise ArgumentError.new("no email specified for account") unless hash["email"]
     unless default
@@ -128,16 +131,20 @@ class AccountManager
     #end if hash[:regexen]
   end
 
+  # Checks if there is an `Account` for the specified `Person`.
   def is_account?(p : Person) : Bool
     is_account_email?(p.email)
   end
   singleton_method is_account?, p
 
+  # Checks if there is an `Account` for the specified email address.
   def is_account_email?(email : String) : Bool
     !account_for(email).nil?
   end
   singleton_method is_account_email?, email
 
+  # Returns the `Account` for the specified email address, or nil
+  # if there is no such `Account`.
   def account_for(email : String) : Account?
     if @email_map.has_key?(email)
       @email_map[email]
@@ -152,6 +159,8 @@ class AccountManager
   end
   singleton_method account_for, email
 
+  # Returns the full email address (including the name)
+  # for the specified email address.
   def full_address_for(email : String) : String?
     a = account_for(email)
     if a
@@ -167,4 +176,3 @@ class AccountManager
 end	# AccountManager
 
 end	# Redwood
-
