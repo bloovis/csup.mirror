@@ -22,6 +22,9 @@ guide :
 guideview :
 	(cd guide && hugo server)
 
+docs/index.html : $(wildcard src/*.cr) $(wildcard src/modes/*.cr)
+	crystal docs
+
 .PHONY: tests
 tests : colormap_test keymap_test ncurses_test email_test logger_test \
         undo_test update_test tagger_test hook_test config_test \

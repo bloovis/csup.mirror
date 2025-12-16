@@ -8,9 +8,6 @@ require "./unicode"
 class NameError < Exception
 end
 
-class ArgumentError < Exception
-end
-
 class InputSequenceAborted < Exception
 end
 
