@@ -12,19 +12,59 @@ module Redwood
 class InputSequenceAborted < Exception
 end
 
+# `Buffer` contains the information about an on-screen buffer
+# of textual information.  Csup may contain multiple buffers,
+# but only one buffer is visible at any one time.  However,
+# a `Buffer` does contain information about the buffer's
+# location and size, which leaves open the future possibility
+# of overlapping windows.
 class Buffer
+  # The horizontal position of the upper left corner.
   getter x : Int32
+
+  # The vertical position of the upper left corner.
   getter y : Int32
+
+  # The width of the buffer.
   getter width : Int32
+
+  # The height of the buffer.
   getter height : Int32
+
+  # The title of the buffer.
   getter title : String
+
+  # The time when the buffer was last drawn.
   getter atime : Time
+
+  # The `Mode` for this buffer.
   getter mode : Mode
+
+  # The Ncurses window for this buffer.
   getter w : Ncurses::Window
+
+  # Present for sup compatibility, but not used.
   property force_to_top : Bool
-  bool_getter :system, :dirty
+
+  # Says whether this is a "system" buffer that should not be included
+  # when the user moves through the buffer list.  The only buffer
+  # for which this is true is, not surprisingly, the "buffer list" buffer.
+  bool_getter :system
+
+  # Says whether the text for this buffer has been changed and needs to be redrawn
+  # on the screen.
+  bool_getter :dirty
+
+  # Present for sup compatibility, but not used.
   bool_property :hidden
 
+  # Creates a new buffer for the specified Ncurses window, mode,
+  # width, height, and other options specifed in *opts*.
+  #
+  # *opts* may contain these booleans:
+  # * `force_to_top` (present for sup compatibility but not used)
+  # * `hidden` (present for sup compatibility but not used)
+  # * `system`: is this is a "system buffer"?
   def initialize(@w, @mode, @width, @height, opts = Opts.new)
     @dirty = true
     @focus = false
@@ -36,9 +76,14 @@ class Buffer
     @system = opts.bool(:system) || false
   end
 
+  # Returns the buffer's content height, which does *not* include the status line at
+  # the bottom of the buffer.
   def content_height; @height - 1; end
+
+  # Returns the buffer's content width (same as buffer width).
   def content_width; @width; end
 
+  # Resizes the buffer given the new number of rows and columns.
   def resize(rows, cols)
     return if cols == @width && rows == @height
     @width = cols
@@ -47,6 +92,9 @@ class Buffer
     mode.resize rows, cols
   end
 
+  # Redraws the buffer with the specified status line.  If the buffer
+  # is dirty, the entire buffer is redrawn on the screen; otherwise,
+  # only the status line is redrawn.
   def redraw(status)
     if @dirty
       draw status
@@ -56,13 +104,24 @@ class Buffer
     commit
   end
 
+  # Sets the dirty flag for the buffer.
   def mark_dirty; @dirty = true; end
 
+  # Tells Ncurses to update the virtual screen with the contents of its window,
+  # and marks the buffer as not dirty.  This does not actually update the physical
+  # screen; that is done by the `doupdate` call in `BufferManager.draw_screen`.
   def commit
     @dirty = false
     @w.noutrefresh
   end
 
+  # Redraws the entire buffer, including the specified status line.
+  #
+  # This calls the `draw` method of the associated `Mode` object (*@mode*)
+  # to do the actual writing to the Ncurses window.  That `draw` method,
+  # in turn, writes to the window by calling `Buffer#write` one more times.
+  # Finally, `draw` calls `commit` to update the Ncurses virtual screen;
+  # this does *not* update the physical screen.
   def draw(status)
     #STDERR.puts "Buffer.draw, caller #{caller[1]}"
     @mode.draw
@@ -71,7 +130,9 @@ class Buffer
     @atime = Time.local
   end
 
-  ## s nil means a blank line!
+  # Writes a line of text to the specified location in the Ncurses window,
+  # filling out the remainder of the window line with blanks.  This does not
+  # update the Ncurses virtual screen or the physical screen.
   def write(y, x, s, opts = Opts.new)
     return if x >= @width || y >= @height
 
@@ -85,20 +146,27 @@ class Buffer
     @w.mvaddstr y, x, s.slice_by_display_length(maxl)
   end
 
+  # Clears the entire Ncurses window with blanks.
   def clear
     @w.clear
   end
 
+  # Writes the specified status line to the Ncurses window, but
+  # does not update the physical screen.
   def draw_status(status : String)
     write @height - 1, 0, status, Opts.new({:color => :status_color})
   end
 
+  # Marks this buffer as the one containing the focus, then
+  # then calls the `focus` method for the associated `Mode`.
   def focus
     @focus = true
     @dirty = true
     @mode.focus
   end
 
+  # Marks this buffer as blurred and non-focused, then then calls the `blur` method for
+  # the associated `Mode`.  Currently, no modes implement a `blur` that does anything.
   def blur
     @focus = false
     @dirty = true
@@ -106,13 +174,22 @@ class Buffer
   end
 end
 
+# `BufferManager` is a singleton class that maintains the list of all buffers in csup.
+# It is responsible for (among other things):
+# * spawning and deleting buffers
+# * running the shell (for an editor)
+# * updating the physical screen
+# * responding to commands entered on the command line
+# * displaying ephemeral progress or error messages
 class BufferManager
   singleton_class
 
-  ## we have to define the key used to continue in-buffer search here, because
-  ## it has special semantics that BufferManager deals with---current searches
-  ## are canceled by any keypress except this one.
+  # Defines the key to do the next search in a buffer.  We have to define it here because
+  # it has special semantics that `BufferManager` deals with: current searches
+  # are canceled by any keypress except this one.
   CONTINUE_IN_BUFFER_SEARCH_KEY = "n"
+
+  # Defines the key to cancel a search in a buffer.
   KEY_CANCEL = "C-g"
 
   @focus_buf : Buffer | Nil
@@ -139,6 +216,7 @@ class BufferManager
     singleton_post_init
   end
     
+  # Sets the focus on the specified buffer.
   def focus_on(buf : Buffer)
     return unless @buffers.index(buf)
     return if buf == @focus_buf
@@ -152,11 +230,13 @@ class BufferManager
     end
   end
 
+  # Returns the buffer list as an array of {name, buffer} tuples.
   def buffers : Array(Tuple(String, Buffer))
     @name_map.to_a
   end
   singleton_method buffers
 
+  # Moves the specified buffer to the head of the buffer list.
   def raise_to_front(buf : Buffer)
     #puts "raise_to_front before delete"
     return unless @buffers.delete(buf)
@@ -173,34 +253,47 @@ class BufferManager
   end
   singleton_method raise_to_front, buf
 
-  ## we reset force_to_top when rolling buffers. this is so that the
-  ## human can actually still move buffers around, while still
-  ## programmatically being able to pop stuff up in the middle of
-  ## drawing a window without worrying about covering it up.
-  ##
-  ## if we ever start calling roll_buffers programmatically, we will
-  ## have to change this. but it's not clear that we will ever actually
-  ## do that.
+  # Rotates the buffer list forwards, so that the buffer at the end of the list
+  # moves to the head.
   def roll_buffers(*args)
     #@name_map.each {|name, buf| STDERR.puts "roll: name #{name}"}
     bufs = rollable_buffers
+    # we reset force_to_top when rolling buffers. this is so that the
+    # human can actually still move buffers around, while still
+    # programmatically being able to pop stuff up in the middle of
+    # drawing a window without worrying about covering it up.
+    #
+    # if we ever start calling roll_buffers programmatically, we will
+    # have to change this. but it's not clear that we will ever actually
+    # do that.
     bufs.last.force_to_top = false
     raise_to_front bufs.first
   end
   singleton_method roll_buffers
 
+  # Rotates the buffer list backwards, so that the next-to-most-recent buffer moves
+  # to the head.
   def roll_buffers_backwards(*args)
+    # Rotate the buffers so that the most recent one is
+    # now the oldest one.
+    @buffers.insert(0, @buffers.pop)
     bufs = rollable_buffers
     return unless bufs.length > 1
-    bufs.last.force_to_top = false
-    raise_to_front bufs[bufs.length - 2]
+    bufs.first.force_to_top = false
+    raise_to_front bufs.last
   end
   singleton_method roll_buffers_backwards
 
+  # Returns a list of rollable buffers, which is all non-system, non-hidden
+  # buffers.
   def rollable_buffers
-    @buffers.select { |b| !(b.system || b.hidden) || @buffers.last == b }
+    @buffers.select { |b| !(b.system || b.hidden) }
   end
 
+  # Responds to an input event (keystroke or mouse event) by calling
+  # the `handle_input` method of the associated mode.
+  # If the mode is currently doing an in-buffer search, any key other
+  # than 'n' cancels the search.
   def handle_input(c : String)
     b = @focus_buf
     if b
@@ -220,7 +313,11 @@ class BufferManager
   end
   singleton_method handle_input, c
 
-  ## requires the mode to have #done? and #value methods
+  # Creates a new temporary "modal" buffer for the purpose of asking the user
+  # for some input that can't be provided by a single line in response to a
+  # prompt.  Currently, this is used only to implement a file browser dialog
+  # that lets the user select a filename.
+  # This requires that the associated mode have `done?` and `value` methods.
   def spawn_modal(title : String, mode : Mode, opts = Opts.new)
     b = spawn title, mode, opts
     draw_screen
@@ -241,9 +338,11 @@ class BufferManager
   end
   singleton_method spawn_modal, title, mode, opts
 
+  # Kills every buffer whose associated mode says that it's killable.
+  # It also kills the Inbox mode buffer even if it says it's not killable.
   def kill_all_buffers_safely
     until @buffers.empty?
-      ## inbox mode always claims it's unkillable. we'll ignore it.
+      # inbox mode always claims it's unkillable. we'll ignore it.
       return false unless @buffers.last.mode.is_a?(InboxMode) || @buffers.last.mode.killable?
       kill_buffer @buffers.last
     end
@@ -251,6 +350,8 @@ class BufferManager
   end
   singleton_method kill_all_buffers_safely
 
+  # Kills the specified buffer if its associated mode says it's killable. Returns `true` if the
+  # buffer was killed, `false` otherwise.
   def kill_buffer_safely(buf)
     if buf
       return false unless buf.mode.killable?
@@ -262,6 +363,7 @@ class BufferManager
   end
   singleton_method kill_buffer_safely, buf
 
+  # Kills each buffer regardless of whether its associated mode says it's killable.
   def kill_all_buffers
     until @buffers.empty?
       kill_buffer @buffers.first
@@ -269,6 +371,8 @@ class BufferManager
   end
   singleton_method kill_all_buffers
 
+  # Kills the specified buffer.  Before it deletes the buffer from the list,
+  # calls the `cleanup` method of the associated mode.
   def kill_buffer(buf)
     raise ArgumentError.new("buffer not on stack: #{buf}: #{buf.title.inspect}") unless @buffers.member? buf
 
@@ -286,13 +390,30 @@ class BufferManager
   end
   singleton_method kill_buffer, buf
 
-  ## for simplicity, we always place the question at the very bottom of the
-  ## screen.
-  # Crystal note: we don't use TextField or Ncurses forms, so ignore
-  # then domain parameter, but allow it for compatibility with existing code.
-
   alias AskBlock = Proc(String, Array(Tuple(String, String)))
 
+  # `do_ask` is the underlying implementation for the various `ask` methods.
+  # It prompts the user with a question, then collects a response line
+  # typed by the user.  *question* contains the prompt string, and *default*
+  # contains the default response if the user doesn't enter one.  If *block_given*
+  # is true, a completions block is present.
+  #
+  # The complications arise from the handling of completions.  At any point
+  # while entering the response, the user can hit the Tab key to ask for
+  # possible completions.  `do_ask` will call the completions block, which may
+  # cause a popup buffer to display a list of possible completions.  Hitting the
+  # Tab key twice in a row forces the completion list to rotate, which is useful
+  # if the entire list is too large to fit in the popup buffer.
+  #
+  # The completion block takes a single parameter, which is the response entered
+  # so far.  It returns an array of tuples that can complete the response.
+  # Each tuple consists of two strings: a long string, and a short string.
+  # 
+  # For simplicity, we always place the question at the very bottom of the
+  # screen.
+  #
+  # NOTE: In csup, unlike sup, we don't use TextField or Ncurses forms, so ignore
+  # the domain parameter, but allow it for compatibility with existing code.
   def do_ask(domain : Symbol, question : String, block_given = true,
 	     default=nil, &block : AskBlock) : String?
     #STDERR.puts "ask: domain #{domain}, question '#{question}', default '#{default}'"
@@ -419,17 +540,23 @@ class BufferManager
     end
   end
 
-  # This variant expects a completions block.
+  # Prompts the user to enter a string.
+  # This variant of `ask` expects a completions block.
   def self.ask(domain : Symbol, question : String, default=nil)
     self.instance.do_ask(domain, question, true, default) {|s| yield s }
   end
 
-  # This variant does NOT expect a completions block.
+  # Prompts the user to enter a string.
+  # This variant of `ask` does *not* expect a completions block.
   def self.ask(domain : Symbol, question : String, default=nil)
     self.instance.do_ask(domain, question, false, default) {|s| [{"", ""}]}
   end
 
-  def ask_with_completions(domain, question, completions, default=nil) : String?
+  # Prompts the user to enter a string.  *completions*
+  # is an array of possible completion strings.
+  def ask_with_completions(domain : Symbol, question : String,
+			   completions : Array(String),
+			   default=nil) : String?
     do_ask domain, question, true, default do |s|
     #  s.fix_encoding!
       completions.select { |x| x =~ /^#{Regex.escape s}/i }.map { |x| {x, x} }
@@ -437,6 +564,8 @@ class BufferManager
   end
   singleton_method ask_with_completions, domain, question, completions, default
 
+  # Prompts the user to enter an email address.  *completions*
+  # is an array of email addresses that are possible matches.
   def ask_many_emails_with_completions(domain : Symbol, question : String,
 			               completions : Array(String),
 				       default=nil) : String?
@@ -455,6 +584,8 @@ class BufferManager
   end
   singleton_method ask_many_emails_with_completions, domain, question, completions, default
 
+  # Prompts the user to enter a string.  *completions*
+  # is an array of strings that are possible matches.
   def ask_many_with_completions(domain : Symbol, question : String,
 				completions : Array(String),
 				default=nil) : String?
@@ -477,7 +608,8 @@ class BufferManager
   end
   singleton_method ask_many_with_completions, domain, question, completions, default
 
-  ## returns a set of labels
+  # Prompts the user to enter one or more labels separated by spaces.  Returns
+  # the labels as a Set.
   def ask_for_labels(domain : Symbol, question : String,
 		     default_labels : Set(String),
 		     forbidden_labels = Set(String).new) : Set(String)?
@@ -505,14 +637,15 @@ class BufferManager
   end
   singleton_method ask_for_labels, domain, question, default_labels, forbidden_labels
 
-  # Ask for contact names, return an array of email addresses, one for each contact.
+  # Prompts the user for contact names, and returns an array of email addresses, one for each contact.
   # If a name doesn't have a contact, it is assumed to be an email address and
   # is returned unchanged.  Default, if present, is a string of comma-separated
   # email addresses to use if the user enters nothing.
   def ask_for_contacts(domain : Symbol, question : String, default = "") : Array(String)?
     default += " " unless default == ""
 
-    recent = Notmuch.load_contacts(AccountManager.user_emails, 10).map { |c| [c.full_address, c.email] }
+    recent = Notmuch.load_contacts(AccountManager.user_emails, 10).
+		     map { |c| [c.full_address, c.email] }
     contacts = Array(String).new
     ContactManager.contacts.each do |c|
       if a = ContactManager.alias_for(c)
@@ -544,6 +677,8 @@ class BufferManager
   end
   singleton_method ask_for_contacts, domain, question, default
 
+  # Prompts the user for the email address of an account defined
+  # in `~/.csup/config.yaml`.
   def ask_for_account(domain : Symbol, question : String) : String?
     completions = AccountManager.user_emails
     answer = BufferManager.ask_many_emails_with_completions domain, question, completions, ""
@@ -554,6 +689,8 @@ class BufferManager
   end
   singleton_method ask_for_account, domain, question
 
+  # Prompts the user to enter a keystroke.  *accept_string* is a string
+  # of possible key values.
   def ask_getch(question : String, accept_string = "") : String
     # If we're not in Ncurses mode, prompt on the terminal and read
     # a line containing the string representing the keystroke.
@@ -603,7 +740,8 @@ class BufferManager
   end
   singleton_method ask_getch, help
 
-  ## returns true (y), false (n), or nil (ctrl-g / cancel)
+  # Prompts the user to answer a yes/no question.  Returns true (y), false (n),
+  # or nil (ctrl-g / cancel).
   def ask_yes_or_no(question : String)
     case(r = ask_getch question, "ynYN")
     when "y", "Y"
@@ -616,6 +754,8 @@ class BufferManager
   end
   singleton_method ask_yes_or_no, question
 
+  # Prompts the user to enter a filename.  The user may enter a partial filename,
+  # and `ask_for_filename` will attempt to find possible completions.
   def ask_for_filename(domain : Symbol, question : String, default=nil, allow_directory=false) : String?
     answer = do_ask domain, question, true, default do |s|
       if s =~ /(~([^\s\/]*))/ # twiddle directory expansion
@@ -664,6 +804,11 @@ class BufferManager
   end
   singleton_method ask_for_filename, domain, question, default, allow_directory
 
+  # Determines the corresponding action for the given keystroke *c* in the Keymap *keymap*.
+  # If the action is another Keymap, waits for the user to enter another key,
+  # and looks for the corresponding action in this Keymap.  This chaining of Keymaps
+  # allows for multi-key commmands.  Returns the name of the action as a string,
+  # or nil if an action is not found.
   def resolve_input_with_keymap(c : String, keymap : Keymap) : String | Nil
     #STDERR.puts "resolve_input_with_keymap: c #{c}, keymap #{keymap.object_id}"
     action, text = keymap.action_for c
@@ -681,7 +826,10 @@ class BufferManager
   end
   singleton_method resolve_input_with_keymap, c, keymap
 
-  # Return number of lines in minibuf.
+  # Returns the number of lines in minibuf plus other ephemeral strings:
+  # * a flash string
+  # * a prompt line
+  # * the actual minibuf lines saved by the `say` method
   def minibuf_lines : Int32
 #    @minibuf_mutex.synchronize do
       [(@flash ? 1 : 0) +
@@ -690,11 +838,12 @@ class BufferManager
 #    end
   end
 
-  # Return array of all minibuf lines, in order by id.
+  # Returns an array of all minibuf lines, in order by id.
   def minibuf_all : Array(String)
     @minibuf_stack.keys.sort.map {|i| @minibuf_stack[i]}
   end
 
+  # Draws the minibuf lines plus any pending flash line on the Ncurses window.
   def draw_minibuf(refresh = false, sync = false)
     m = Array(String).new
     #@minibuf_mutex.synchronize do
@@ -716,6 +865,15 @@ class BufferManager
     #Ncurses.mutex.unlock unless opts[:sync] == false
   end
 
+  # `do_say` is the underlying implementation for the two `say` methods.
+  # It saves the string *s* in the minibuf stack and returns its ID.
+  #
+  # The minibuf stack holds messages that display progress.  So far, it's only used
+  # in one place: `ContactListMode#load`.  This was useful in sup, in which
+  # tasks like `load` were run in separate threads, and the user would want
+  # to see progress messages for long-running tasks.  But in csup, we don't
+  # use multiple threads, so it's really not useful, but it's retained for
+  # compatibility with old sup code.
   def do_say(s : String, id = -1, block_given = true, &b)
     new_id = id == -1
 
@@ -749,20 +907,27 @@ class BufferManager
     id
   end
 
-  # Crystal doesn't have block_given or allow blocks to be optional, so
-  # we provide two versions of say, one that requires a block
-  # and one that doesn't.
+  # Saves the string *s* in the minibuf, calls the block with the ID of the string,
+  # and returns the ID.
+  #
+  # Crystal doesn't have `block_given?` or allow blocks to be optional, so
+  # we provide two versions of `say`, one that requires a block (this one),
+  # and one that doesn't (see below).
   def self.say(s : String, id = -1)
     self.instance.do_say(s, id, true) {|id| yield id }
   end
 
+  # Saves the string *s* in the minibuf and returns its ID.  This variant does *not* take a block.
   def self.say(s : String, id = -1)
     self.instance.do_say(s, id, false) {}
   end
 
+  # Clears the flash message.
   def erase_flash; @flash = nil; end
   singleton_method erase_flash
 
+  # Saves an ephemeral flash message *s*, to be displayed when the screen
+  # is redrawn.
   def flash(s : String)
     if Redwood.cursing
       @flash = s
@@ -773,8 +938,10 @@ class BufferManager
   end
   singleton_method flash, s
 
-  # Deleting a minibuf entry is much simpler in Crystal than in Ruby, because
-  # we use hash instead of a sparse array.
+  # Deletes the minibuf entry specified by *id*.
+  #
+  # Deleting a minibuf entry is much simpler in csup (Crystal) than in sup (Ruby), because
+  # we use a hash instead of a sparse array for the minibuf.
   def clear(id : Int32)
     #@minibuf_mutex.synchronize do
       @minibuf_stack.delete(id)
@@ -784,6 +951,8 @@ class BufferManager
   end
   singleton_method clear, id
 
+  # Forces a redraw of the screen from scratch.  This is useful after
+  # an event causes the screen to be corrupted, such as a terminal resize.
   def completely_redraw_screen
     return if @shelled
 
@@ -802,6 +971,9 @@ class BufferManager
   end
   singleton_method completely_redraw_screen
 
+  # Draws the screen for the topmost buffer, including the buffer text and its status line.
+  # If the terminal is xterm-like, it sets terminal's title line to the title of the buffer.
+  # Finally, it tells Ncurses to update the physical screen.
   def draw_screen(opts = Opts.new)
     #minibuf_all.each_with_index {|s, i| Ncurses.print "draw_screen: caller line #{caller_line}, minibuf[#{i}]='#{s}'\n" }
     return if @shelled
@@ -837,10 +1009,11 @@ class BufferManager
   end
   singleton_method draw_screen, opts
 
-  ## if the named buffer already exists, pops it to the front without
-  ## calling the block. otherwise, gets the mode from the block and
-  ## creates a new buffer. returns two things: the buffer, and a boolean
-  ## indicating whether it's a new buffer or not.
+  # Spawns a buffer with the title *title*, and whose mode is provided by the passed-in block.
+  # If the named buffer already exists, pops it to the front without
+  # calling the block.  Otherwise, gets the mode from the block and
+  # creates a new buffer for that mode. Returns a tuple containing the buffer and a boolean
+  # indicating whether it's a new buffer or not.
   def spawn_unless_exists(title : String, opts=Opts.new, &b : -> Mode)
     new =
       if @name_map.has_key? title
@@ -857,6 +1030,12 @@ class BufferManager
     self.instance.spawn_unless_exists(title, opts, &b)
   end
 
+  # Creates a new buffer for the mode *mode*.  The hash *opts* may optionally
+  # specify:
+  # * *width*: buffer width
+  # * *height*: buffer height
+  # * *raise_to_top*: should the buffer be on top?
+  # * *system*: is this a system buffer?
   def spawn(title : String, mode : Mode, opts = Opts.new)
     # raise ArgumentError, "title must be a string" unless title.is_a? String
     realtitle = title
@@ -902,6 +1081,8 @@ class BufferManager
     "Sup #{Redwood::VERSION} :: #{buf.title}"
   end
 
+  # Returns a tuple containing two strings: the deault buffer status line,
+  # and the default terminal title.
   def get_status_and_title(buf)
 {% if false %}
     opts = {
@@ -924,11 +1105,14 @@ class BufferManager
     end
   end
 
+  # Returns the buffer that has the current focus.
   def focus_buf
     @focus_buf
   end
   singleton_method focus_buf
 
+  # Runs the command *command* by spawning a shell.  If *is_gui* is false, saves
+  # the Ncurses state before running the shell, and restores it after the shell returns.
   def shell_out(command : String, is_gui=false)
     debug "shell out #{command}"
     success = false
@@ -950,6 +1134,8 @@ class BufferManager
   end
   singleton_method shell_out, command, is_gui
 
+  # Returns the list of user names from `/etc/passwd`, and also
+  # saves the list in `@users`.
   def users
     unless u = @users
       u = `getent passwd`.lines.map {|x| x.split(":")[0]}
