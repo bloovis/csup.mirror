@@ -3,14 +3,27 @@ require "yaml"
 
 module Redwood
 
+# `Config` is a singleton class responsible for reading configuration
+# information from `~/.csup/config.yaml`.
+# This information includes email accounts and other variables
+# that influence the behavior of csup.
 class Config
   singleton_class
 
+  # Contains settings for a single email account (name, email addresses, SMTP settings, etc.).
   alias Account = Hash(String, String | Array(String))		# account settings (name, email, etc.)
+
+  # Contains a hash of all accounts, indexed by account name.
   alias Accounts = Hash(String, Account)	# account name => account settings
+
+  # Describes the possible types that may appear in the configuration file.
   alias ConfigEntry = String | Int32 | Bool | Array(String) | Accounts
+
+  # Contains a hash of all configuration items, indexed by name.
   alias ConfigTable = Hash(String, ConfigEntry)
 
+  # Initializes the configuration; *fn* contains the filename of the
+  # configuration file.
   def initialize(fn : String)
     singleton_pre_init
     @entries = ConfigTable.new
@@ -24,7 +37,8 @@ class Config
     singleton_post_init
   end
 
-  # Get gecos field from /etc/passwd, which contains the user's full name.
+  # Returns the `gecos` field for the current user from `/etc/passwd`,
+  # which contains the user's full name.
   def get_gecos : String
     begin
       user = ENV["USER"]
@@ -35,7 +49,7 @@ class Config
     end
   end
 
-  # Methods for retrieving entries as specific types.
+  # Defines methods for retrieving configuration entries as specific types.
   macro get(name, type)
     def {{name}}(s : Symbol | String) : {{type}}
       @entries[s.to_s].as({{type}})
@@ -43,30 +57,39 @@ class Config
     singleton_method {{name}}, s
   end
     
+  # Returns the configuration entry named *s* as a string.
   get(str, String)
+
+  # Returns the configuration entry named *s* as an integer.
   get(int, Int32)
+
+  # Returns the configuration entry named *s* as a boolean.
   get(bool, Bool)
+
+  # Returns the configuration entry named *s* as a string array.
   get(strarray, Array(String))
 
-  # Does config have the specified entry?
+  # Returns true if the configuration has an entry named *s*.
   def has_key?(s : Symbol | String) : Bool
     @entries.has_key?(s.to_s)
   end
   singleton_method has_key?, s
 
-  # Retrieve the specified account.
+  # Returns the account named *s* from the configuration.
   def account(s : Symbol | String) : Account
     accounts = @entries["accounts"].as(Accounts)
     accounts[s.to_s].as(Account)
   end
   singleton_method account, name
 
-  # Retrieve an array of all accounts
+  # Returns an array of all accounts from the configuration.
   def accounts : Accounts
     @entries["accounts"].as(Accounts)
   end
   singleton_method accounts
 
+  # Sets up default values for configuration, then reads the configuration file
+  # to override those values or set new values.
   def init_config
     # d = default config table
     d = ConfigTable.new
@@ -128,6 +151,7 @@ class Config
     end
   end
 
+  # Reads the configuration file and returns a hash (`ConfigTable`) representation of it.
   def load_user_config : ConfigTable
     #puts "load_user_config: filename = #{@filename}"
     yaml = File.open(@filename) { |f| YAML.parse(f) }
@@ -178,6 +202,8 @@ class Config
     return config
   end
 
+  # Writes the in-memory configuration information back to the
+  # configuration file in YAML form.
   def save_config
     begin
       File.open(@filename, "w") { |f| @entries.to_yaml(f) }
