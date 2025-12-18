@@ -4,9 +4,18 @@ require "./supcurses"
 
 module Redwood
 
+# `Colormap` is a singleton class responsible for the mapping of logical
+# color names (`text_color`, `status_color`, `label_color`, etc.) into
+# on-screen (Ncurses) colorpairs.  It defines many default colors,
+# but also reads user-defined colors from `~/.csup/colors.yaml`.
 class Colormap
   singleton_class
 
+  # `ColorEntry` contains the Ncurses color values for a single color:
+  # the foreground color (`fg`), background color (`bg`), and one or more attributes (`attrs`).
+  # The `color` property contains an Ncurses colorpair value; it is initially
+  # nil, and is filled in as needed, because Ncurses supports a limited
+  # number of colorpairs.
   class ColorEntry
     property fg : Int32
     property bg : Int32
@@ -20,10 +29,6 @@ class Colormap
       {fg, bg, attrs, color}
     end
   end
-
-  # Class variables.
-  #@@initialized = false
-  #@@instance : Colormap?
 
   @@default_colors = {
     "text" => { "fg" => "white", "bg" => "black" },
@@ -70,23 +75,25 @@ class Colormap
   }
 
   # Instance variables
+
   @highlights = {} of String => String
   @entries = {} of String => ColorEntry
   @filename : String
 
+  # Cache of Ncurses colorpairs, indexed by {fg, bg} tuple.
+  @color_pairs = {[Ncurses::COLOR_WHITE, Ncurses::COLOR_BLACK] => 0}
+
+  # Table of names of colors that use the same colorpair.
+  @users = {} of Int32 => Array(String)     # colorpair => [names of colors]
+  @next_id = 0
+
   def initialize(@filename)
     singleton_pre_init
-
-    @color_pairs = {[Ncurses::COLOR_WHITE, Ncurses::COLOR_BLACK] => 0}
-    @users = Hash(Int32, Array(String)).new     # colorpair => [names of colors]
-    @next_id = 0
     reset
-
     singleton_post_init
-
-    # yield self if block_given?
   end
 
+  # Clears the colormap (`@entries`) to their initial, nearly empty state.
   def reset
     @entries = Hash(String, ColorEntry).new
     @highlights = { "none" => highlight_sym("none")}
@@ -94,8 +101,15 @@ class Colormap
                                                    Ncurses::COLOR_BLACK,
                                                    [] of Int32)
   end
+  singleton_method reset
 
-#  def add sym, fg, bg, attr=nil, highlight=nil
+  # Adds an entry to the colormap (`@entries`):
+  #
+  # * *sym*: the name of the color
+  # * *fg*: Ncurses foreground color
+  # * *bg*: Ncurses background color
+  # * *attr*: array of Ncurses cell attributes
+  # * *highlight*: name of the corresponding highlight color
   def add(sym : String, fg : Int32, bg : Int32, attr : Array(Int32), highlight : String | Nil)
     # Ruby raise accepts a second string parameter, not supported in Crystal.
     # How to handle this difference correctly?
@@ -114,14 +128,18 @@ class Colormap
     @highlights[sym] = highlight
   end
 
+  # Returns the name *sym* with the "_highlight" suffix, used when
+  # defining a color entry for a highlighted version of a normal color.
   def highlight_sym(sym : Symbol | String) : String
-    if sym.is_a?(Symbol)
-      return sym.to_s + "_highlight"
-    else
-      return sym + "_highlight"
-    end
+    return sym.to_s + "_highlight"
   end
 
+  # Returns a new color entry for a highlighted version of the specified
+  # Ncurses colors and attributes:
+  #
+  # * *fg*: Ncurses foreground color
+  # * *bg*: Ncurses background color
+  # * *attrs*: array of Ncurses cell attributes
   def highlight_for(fg, bg, attrs)
     hfg =
       case fg
@@ -157,13 +175,20 @@ class Colormap
     return ColorEntry.new(hfg, hbg, attrs)
   end
 
-  def color_for(sym_or_string : Symbol | String, highlight=false)
-    sym = sym_or_string.to_s
+  # Returns the Ncurses colorpair value for the color whose name is *name*.
+  # If *highlight* is true, returns the highlighted version of the color.
+  #
+  # Because Ncurses supports a limited number of active colorpairs,
+  # old colorpair slots will get reused if more colors than that limit
+  # are used simultaneously.  This should never happen, but `color_for`
+  # will display a warning if it does.
+  def color_for(name : Symbol | String, highlight=false) : Int32
+    sym = name.to_s
     sym = @highlights[sym] if highlight
     return Ncurses::COLOR_BLACK if sym == "none"
     raise ArgumentError.new("undefined color #{sym}") unless @entries.has_key?(sym)
 
-    ## if this color is cached, return it
+    # If this color is cached, return it.
     fg, bg, attrs, color = @entries[sym].tuple
     #debug "entries[#{sym}] = #{fg}, #{bg}, #{attrs}, #{color}"
     return color if color
@@ -171,13 +196,13 @@ class Colormap
     if @color_pairs.has_key?([fg, bg])
       cp = @color_pairs[[fg, bg]]
       ## nothing
-    else ## need to get a new colorpair
+    else ## need to get a new colorpair.
       @next_id = (@next_id + 1) % Ncurses.max_pairs
       @next_id += 1 if @next_id == 0 # 0 is always white on black
       id = @next_id
       #debug "colormap: for color #{sym}, using id #{id} -> #{fg}, #{bg}"
       Ncurses.init_pair(id.to_i16, fg.to_i16, bg.to_i16) ||
-        raise ArgumentError.new("couldn't initialize curses color pair #{fg}, #{bg} (key #{id})")
+        raise ArgumentError.new("couldn't initialize curses colorpair #{fg}, #{bg} (key #{id})")
 
       cp = @color_pairs[[fg, bg]] = LibNCurses.COLOR_PAIR(id)
       #debug "colormap: color_pair for id #{id} = #{cp}"
@@ -194,10 +219,10 @@ class Colormap
       end
     end
 
-    ## by now we have a color pair
+    ## by now we have a colorpair
     color = attrs.reduce(cp) { |color, attr| color | attr }
     @entries[sym].color = color # fill the cache
-    # record entry as a user of that color pair
+    # record entry as a user of that colorpair
     if @users.has_key?(cp)
       @users[cp] << sym
     else
@@ -205,9 +230,12 @@ class Colormap
     end
     color
   end
+  singleton_method color_for, sym
 
-  def sym_is_defined(sym_or_string : Symbol | String) : String?
-    sym = sym_or_string.to_s
+  # If there is a color with the name *name*, returns that name;
+  # otherwise returns nil.
+  def sym_is_defined(name : Symbol | String) : String?
+    sym = name.to_s
     #debug "checking if @entries has key #{sym}"
     if @entries.has_key?(sym)
       return sym
@@ -215,7 +243,10 @@ class Colormap
       return nil
     end
   end
+  singleton_method sym_is_defined, sym
 
+  # Reads the user-defined colors from `~/.csup/colors.yaml` into
+  # a colormap hash and returns it.
   def load_user_colors
     yaml = File.open(@filename) { |f| YAML.parse(f) }
     colors = Hash(String, Hash(String, String | Array(String))).new
@@ -248,12 +279,12 @@ class Colormap
     return colors
   end
 
-  ## Try to use the user defined colors, in case of an error fall back
-  ## to the default ones.
+  # Loads the user colors from `~/.csup/colors.yaml` into the colormap,
+  # then adds default colors to the colormap to fill in the blanks.
   def populate_colormap
     user_colors = load_user_colors
 
-    ## Set attachment sybmol to sane default for existing colorschemes
+    # Set attachment symbol to sane default for existing colorschemes
     if user_colors && user_colors.has_key? "to_me"
       user_colors["with_attachment"] = user_colors["to_me"] unless user_colors.has_key? "with_attachment"
     end
@@ -295,23 +326,8 @@ class Colormap
     end
     #debug "@entries after populate_color_map:\n#{@entries.inspect}"
   end
-
-  # The following hacks let the caller use either the Colormap class
-  # or its instance for some functions.  We can't use the Ruby method_missing
-  # trick seen below, so we have to do the stubs manually.
-
-  singleton_method color_for, sym
-  singleton_method sym_is_defined, sym
-  singleton_method reset
   singleton_method populate_colormap
 
-#  def self.instance; @@instance; end
-#  def self.method_missing meth, *a
-#    Colormap.new unless @@instance
-#    @@instance.send meth, *a
-#  end
-  # Performance shortcut
-#  def self.color_for(*a); @@instance.color_for(*a); end
 end	# class Colormap
 
 end	# module Redwood
