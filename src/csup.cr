@@ -142,6 +142,8 @@ module Redwood
    poll_mode.poll
   end
 
+{% unless flag?(:TEST) %}
+
 # Functions required by main.  We have to use `extend self` to overcome
 # namespace problems with the `actions` macro.
 
@@ -328,5 +330,7 @@ rescue ex
   puts ex.inspect_with_backtrace
   exit 1
 end
+
+{% end %} # flag TEST
 
 end	# Redwood

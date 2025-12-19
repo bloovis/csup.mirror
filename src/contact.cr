@@ -3,14 +3,26 @@ require "./singleton"
 
 module Redwood
 
+# `ContactManager` is a singleton class that manages the list of
+# contacts, which are saved in the file `~/.csup/contacts.txt`.
 class ContactManager
   singleton_class
 
+  # Filename containing the contacts list.
   @fn = ""
-  @p2a = {} of Person => String		# person to alias
+
+  # Maps a `Person` object to an alias name.
+  @p2a = {} of Person => String
+
+  # Maps an alias name to a `Person` object.
   @a2p = {} of String => Person		# alias to person
+
+  # Maps an email address to a `Person` object.
   @e2p = {} of String => Person		# email to person
 
+  # Reads the contact list from `~/.csup/contacts.txt` and initializes
+  # the various hashes for it (Person => alias, alias => Person, and
+  # email => Person).
   def initialize(fn : String)
     singleton_pre_init
     @fn = fn
@@ -28,11 +40,13 @@ class ContactManager
     singleton_post_init
   end
 
-  def contacts
+  # Returns the contacts list as array of `Person` objects.
+  def contacts : Array(Person)
     @p2a.keys
   end
   singleton_method contacts
 
+  # Returns the list of contacts that have aliases as an array of `Person` objects.
   def contacts_with_aliases : Array(Person)
     @a2p.values.uniq
   end
@@ -55,20 +69,20 @@ class ContactManager
   end
   singleton_method update_alias, person, aalias
 
-  # Return the Person for the given alias, or nil if not found.
-  def contact_for(aalias)
+  # Returns the `Person` for the given alias, or nil if not found.
+  def contact_for(aalias : String) : Person?
     @a2p[aalias]?
   end
   singleton_method contact_for, aalias
 
-  # Return the alias for given Person, or nil if not found.
-  def alias_for(person)
+  # Returns the alias for given `Person`, or nil if not found.
+  def alias_for(person : Person) : String?
     @p2a[person]?
   end
   singleton_method alias_for, person
 
   # Return the email for given alias, or nil if not found.
-  def email_for(aalias)
+  def email_for(aalias : String) : String?
     if p = @a2p[aalias]?
       return p.full_address
     else
@@ -77,12 +91,14 @@ class ContactManager
   end
   singleton_method email_for, aalias
 
-  def person_for(email)
+  # Returns the `Person` for the given email address, or nil if not found.
+  def person_for(email : String) : Person?
     @e2p[email]?
   end
   singleton_method person_for, email
 
-  def is_aliased_contact?(person)
+  # Returns true if the given `Person` has an alias.
+  def is_aliased_contact?(person : Person) : Bool
     if p = @p2a[person]?
       # In Csup, we use an empty string instead of nil to mean "no alias".
       return !p.empty?
@@ -92,6 +108,8 @@ class ContactManager
   end
   singleton_method is_aliased_contact?, person
 
+  # If the contact list has been modified since it was read in,
+  # writes the contact list back out to `~/.csup/contacts.txt`.
   def save
     return unless @modified
     File.open(@fn, "w") do |f|

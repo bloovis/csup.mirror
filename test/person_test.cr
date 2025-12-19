@@ -5,20 +5,43 @@ module Redwood
 
 init_managers
 
-p = Person.new("Mark Alexander", "marka@pobox.com")
-puts "Person = '#{p.to_s}'"
-p = Person.new(nil, "noname@pobox.com")
-puts "Person = '#{p.to_s}'"
-p = Person.from_address("marka@pobox.com")
-puts "Person = '#{p.to_s}'"
-p = Person.from_address("\"A real somebody!\" <somebody@pobox.com>")
-puts "Person = '#{p.to_s}'"
-
-ps = Person.from_address_list("marka@pobox.com, potus@whitehouse.gov")
-ps.each do |p|
-  puts "Person from list: #{p.to_s}"
+def print_person(p : Person)
+  puts "  to_s = '#{p.to_s}'"
+  puts "  short_name = '#{p.shortname}'"
+  puts "  mediumname = '#{p.mediumname}'"
+  puts "  full_address = '#{p.full_address}'"
 end
-p = Person.from_name_and_email(nil, "hbiden@rosemontseneca.com")
-puts "Person from name and email: name #{p.name}, alias #{ContactManager.alias_for(p)}, email #{p.email}"
+
+def test_new(name : String?, email : String)
+  puts "Testing Person.new(name '#{name}', email '#{email}')"
+  p = Person.new(name, email)
+  print_person(p)
+end
+
+def test_address(address : String)
+  puts "Testing Person.from_address('#{address}')"
+  p = Person.from_address(address)
+  print_person(p)
+end
+
+def test_list(s : String)
+  puts "Testing Person.from_address_list('#{s}')"
+  ps = Person.from_address_list(s)
+  ps.each {|p| print_person(p)}
+end
+
+def test_from_name_and_email(name : String?, email : String)
+  puts "Testing Person.from_name_and_email('#{name}', email '#{email}')"
+  p = Person.from_name_and_email(name, email)
+  print_person(p)
+  puts "  name #{p.name}, alias #{ContactManager.alias_for(p)}, email #{p.email}"
+end
+
+test_new("Mark Alexander", "marka@pobox.com")
+test_new(nil, "noname@pobox.com")
+test_address("marka@pobox.com")
+test_address("\"A real somebody!\" <somebody@pobox.com>")
+test_list("marka@pobox.com, potus@whitehouse.gov")
+test_from_name_and_email("Mark Alexander", "marka@pobox.com")
 
 end	# Redwood
