@@ -86,13 +86,14 @@ module Redwood
     end
   end
 
-  # Accessor used by EditMessageMode to redirect EMail::Client log messages.
-  def log_io
+  # Returns the IO handle for the log file `~/.csup/log`.  This is used by `EditMessageMode` to
+  # capture `EMail::Client` log messages.
+  def log_io : IO?
     @@log_io
   end
 
-  # Dummy poll mode that exists only for the ability to call UpdateManager.relay
-  # after polling.
+  # `PollMode` is a dummy mode (i.e., one that does not have a `Buffer`), that exists only for
+  # the ability to call `UpdateManager.relay` after polling.
   class PollMode < Mode
     def initialize
       @notmuch_lastmod = Notmuch.lastmod
@@ -134,6 +135,9 @@ module Redwood
     end
   end
 
+  # Polls notmuch for new messages.  The first time it is called, it creates
+  # a `PollMode` object, which in turn causes other Modes
+  # to be notified that a poll has occurred.
   def poll
    unless poll_mode = @@poll_mode
      poll_mode = PollMode.new
@@ -149,6 +153,7 @@ module Redwood
 
 extend self
 
+# Shuts down all managers and closes the log file.
 def finish
   ContactManager.save if Redwood::ContactManager.instantiated?
   SearchManager.save if Redwood::SearchManager.instantiated?
@@ -167,11 +172,13 @@ def finish
   end
 end
 
-# Commands.  Every command must be listed in the actions macro below.
+# This macro lists all global commands, i.e., commands that are not implemented
+# by a `Mode`.
 actions quit_now, quit_ask, kill_buffer, roll_buffers, roll_buffers_backwards,
         list_buffers, list_contacts, redraw, search, poll, compose, help,
 	list_labels, version, display_keymap
 
+# This command exits csup without asking the user if it's OK.
 def quit_now
   #BufferManager.say "This is the global quit command."
   #puts "This is the global quit command."
@@ -186,37 +193,48 @@ def quit_now
   exit 0
 end
 
+# This command exits csup after asking if it's OK.
 def quit_ask
   if BufferManager.ask_yes_or_no "Really quit?"
     quit_now
   end
 end
 
+# This command moves the current buffer to the end of the buffer list,
+# and brings the next buffer to the front.
 def roll_buffers
   BufferManager.roll_buffers
 end
 
+# This command moves the next-most-recent buffer to the head of the buffer list.
 def roll_buffers_backwards
   BufferManager.roll_buffers_backwards
 end
 
+# This command kills the current buffer.
 def kill_buffer
   BufferManager.kill_buffer_safely(BufferManager.focus_buf)
 end
 
+# This command opens a buffer showing the list of all buffers.
 def list_buffers
   BufferManager.spawn_unless_exists("buffer list", Opts.new({:system => true})) { BufferListMode.new }
 end
 
+# This command opens a buffer showing the contacts list.
 def list_contacts
   b, new = BufferManager.spawn_unless_exists("Contact List") { ContactListMode.new }
   #mode.load_in_background if new
 end
 
+# This command redraws the screen, which also happens automatically when the terminal
+# is resized.
 def redraw
   BufferManager.completely_redraw_screen
 end
 
+# This command prompts the user for a search string, and opens a buffer containing
+# the list of messages that match that search.
 def search
   completions = LabelManager.all_labels.map { |l| "label:#{LabelManager.string_for l}" }
   completions += Notmuch::COMPL_PREFIXES
@@ -230,10 +248,13 @@ def search
   end
 end
 
+# This command opens a buffer that allows the user to compose a new email message.
 def compose
   ComposeMode.spawn_nicely
 end
 
+# This command opens a buffer containing a list of the key bindings for the Mode
+# in which it was invoked.
 def help
   #STDERR.puts "help command"
   return unless global_keymap = Redwood.global_keymap
@@ -244,6 +265,8 @@ def help
   end
 end
 
+# This command opens a buffer containing a list of all message labels, allowing the
+# user to then open another buffer showing the messages that have that label.
 def list_labels
   labels = LabelManager.all_labels.map { |l| LabelManager.string_for l }
 
@@ -257,20 +280,21 @@ def list_labels
   end
 end
 
+# This command displays a message showing the csup version (date + source code commit hash).
 def version
   BufferManager.flash "Csup version #{Redwood::VERSION}"
 end
 
-# Display in a text buffer the yaml representation of all keymaps.
+# This command opens a buffer containing the yaml representation of all key bindings.
 # This text can be used as the basis for the user-configurable
-# keymap.yaml file.
+# `~/.csup/keymap.yaml` file.
 def display_keymap
   yaml = Keymap.keymaps_to_yaml
   #STDERR.puts "keymap: yaml = '#{yaml}'"
   BufferManager.spawn "Keymaps", TextMode.new(yaml)
 end
 
-# Main program
+# This is the main program of csup.
 def main
   init_managers
 
@@ -322,6 +346,8 @@ def main
   end
 end
 
+# Here we capture any unhandled exceptions caused by csup, and print
+# the exception information along with a backtrace before exiting.
 begin
   main
 rescue ex
