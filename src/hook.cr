@@ -1,25 +1,31 @@
-# This HookManager is very different from the one in Sup.  We can't incorporate
-# hooks directly into a compiled Crystal binary.  Instead, hooks are individual
-# executable programs that take input from stdin, and produce output to stdout.
-# The input and output may be either JSON or plain text, depending on the
-# particular hook.  See test/hook_test.cr for examples of running hooks,
-# and see scripts in hooks/ for example of hooks themselves.
-
 require "./singleton"
 
 module Redwood
 
+# `HookManager` is responsible for running user-defined hooks, which are executable
+# scripts in `~/.csup/hooks`.  Csup calls these hooks at various places to allow
+# users to alter its behavior.
+#
+# This `HookManager` is very different from the one in Sup.  We can't incorporate
+# hooks directly into a compiled Crystal binary.  Instead, hooks are individual
+# executable programs that take input from stdin, and produce output to stdout.
+# The input and output may be either JSON or plain text, depending on the
+# particular hook.  See `test/hook_test.cr` for examples of running hooks,
+# and see scripts in `hooks/` for example of hooks themselves.
 class HookManager
   singleton_class
 
   property dir : String
 
+  # Saves the directory that contains the hooks.
   def initialize(@dir : String)
     singleton_pre_init
     @dir = dir
     singleton_post_init
   end
 
+  # Runs a hook in a pipe, and passes the pipe to the block.  The block
+  # can then send data to the hook and read data back from it.
   def self.run(name : String, &) : Bool
     path = File.join(self.instance.dir, name)
     begin
@@ -32,6 +38,7 @@ class HookManager
     end
   end
 
+  # Returns true if the hook whose name is *name* exists in the hook directory.
   def self.enabled?(name : String) : Bool
     path = File.join(self.instance.dir, name)
     File.exists?(path)
