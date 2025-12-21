@@ -157,7 +157,9 @@ extend self
 def finish
   ContactManager.save if Redwood::ContactManager.instantiated?
   SearchManager.save if Redwood::SearchManager.instantiated?
-  Logger.remove_sink @@log_io
+  if log_io = @@log_io
+    Logger.remove_sink log_io
+  end
 
   # De-instantiate all managers.
   {% for name in [HookManager, ContactManager, LabelManager, AccountManager,
