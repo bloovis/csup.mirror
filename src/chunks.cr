@@ -170,9 +170,10 @@ class AttachmentChunk < Chunk
   end
 end
 
-# `TextChunk` represents a message chunk consisting of lines of text in `@lines`.
-# Removes all but one trailing empty line.
+# `TextChunk` represents a message chunk consisting of lines of plain text.
 class TextChunk < Chunk
+  # Creates a text chunk for the array of lines in *@lines*.
+  # Removes all but one trailing empty line.
   def initialize(@lines)
     super(:text)
     # trim off all empty lines except one
