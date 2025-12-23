@@ -176,6 +176,7 @@ end
 
 # This macro lists all global commands, i.e., commands that are not implemented
 # by a `Mode`.
+
 actions quit_now, quit_ask, kill_buffer, roll_buffers, roll_buffers_backwards,
         list_buffers, list_contacts, redraw, search, poll, compose, help,
 	list_labels, version, display_keymap

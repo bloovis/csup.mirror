@@ -4,6 +4,8 @@ require "./pipe"
 require "file_utils"
 
 class Object
+  # Catches attempts to call `send` on `Mode` objects that haven't
+  # defined `send`.
   def send(action : String | Symbol)
     STDERR.puts "Object can't send #{action}!"
   end
@@ -11,10 +13,12 @@ end
 
 module Redwood
 
-# This macro defines a send method that given a string containing the name
-# of a method, calls that method.  The arguments to the macro are
-# the names of the allowed methods.
+# This macro defines a `send` method for the enclosing class that, given a string containing the name
+# of a method, calls that method.  It also defines `respond_to?` method that, given a string
+# containing the name of a method, returns true if that method can be invoked by `send`.
+# The arguments to the macro (*args*) are the names of the allowed methods.
 macro actions(*names)
+  # Invokes the method named *action*, passing it the arguments *args*.
   def send(action : String, *args)
     case action
     {% for name in names %}
@@ -27,6 +31,7 @@ macro actions(*names)
     end
   end
 
+  # Returns true if a method named *action* can be invoked by `send`.
   def respond_to?(action)
     found = [
       {% for name in names %}
@@ -41,11 +46,16 @@ macro actions(*names)
   end
 end
 
+# `Mode` is the base class for all Modes in the `src/modes` directory.
+# Each Mode displays text in a `Buffer` and interacts with the user, with specific
+# behaviors unique to that `Mode`.
 class Mode
-  # In each derived class, call the mode_class macro with the names of
-  # all methods that are to be bound to keys.  This creates:
-  # - an "ancestors" method for the class
-  # - a "send" method that invokes the named methods
+  # In each derived class, call the `mode_class` macro with the names of
+  # all methods that are to be bound to keys.  It creates an `ancestors` method
+  # that returns a list of the names of all the classes in the hierarchy
+  # for this class. Then for each of the *names*, it defines:
+  # - a `send` method that invokes the named method
+  # - a `respond_to?` method that returns true if the named method can be invoked by `send`
   macro mode_class(*names)
     CLASSNAME = self.name
     def ancestors
@@ -56,21 +66,24 @@ class Mode
     {% end %}
   end
 
-  # Need these dummies to allow the subclassed versions defined
-  # by mode_class to be recognized.
+  # Defines a dummy `send` method.  Derived classes need to define their own `send`
+  # by invoking the `mode_class` macro.
   def send(action : String | Symbol, *args)
     #puts "Mode.send: should never get here!"
   end
 
+  # Defines a dummy `respond_to?` method.  Derived classes need to define their own
+  # `respond_to?` by invoking the `mode_class` macro.
   def respond_to?(action)
     return false
   end
 
-  # Define a getter for @buffer that always returns a non-nil value,
-  # so that derived classes don't always have to check for nil.
   @buffer : Buffer?
   @dummybuffer : Buffer?
 
+  # Defines a getter for `@buffer` that always returns a non-nil value,
+  # so that derived classes don't always have to check for nil.  It creates
+  # a dummybuffer for those rare situations where `@buffer` might be nil.
   def buffer : Buffer
     if b = @buffer
       return b
@@ -89,10 +102,13 @@ class Mode
     end
   end
 
+  # Sets the buffer for this mode to *b*.
   def buffer=(b : Buffer)
     @buffer = b
   end
 
+  # Creates a `Keymap` for this Mode and yields it to the block, which should
+  # add bindings to the map.
   def self.register_keymap
     classname = self.name
     #STDERR.puts "register_keymap for class #{classname}, keymaps #{Redwood.keymaps.object_id}"
@@ -108,41 +124,73 @@ class Mode
     k
   end
 
+  # Returns an list of class names representing the class hierarchy for this Mode.
+  # Each derived class should invoke the `mode_class` macro to create its own
+  # `ancestors` method that adds its class name to the list.
   def ancestors
     [] of String
   end
 
+  # Returns a modified form of class name *s*.  It removes all parent class names, then
+  # converts the resulting camel-case name to a hyphenated name and lower-cases it.
+  # For example, it converts "Redwood::InboxMode" to "inbox-mode"
   def self.make_name(s)
     s.gsub(/.*::/, "").camel_to_hyphy
   end
 
+  # Returns the enclosing class's name altered using `make_name`.
   def name
     Mode.make_name(self.class.name)
   end
 
+  # Sets the associated buffer to nil.
   def initialize
     @buffer = nil
     #puts "Mode.initialize"
   end
 
+  # Returns the `KeyMap` for this mode.
   def keymap
     Redwood.keymaps[self.class.name]
   end
 
+  # These methods must be implemened by derived Mode classes.
+
+  # Returns true if the Mode's buffer is killable.
   def killable?; true; end
+
+  # Returns true if the Mode's buffer has unsaved data (used only by `ResumeMode`).
   def unsaved?; false end
+
+  # Writes the visible part of the Mode's buffer to the Ncurses window.
   def draw; end
+
+  # Takes the appropriate action when the Mode's buffer receives the focus.
   def focus; end
+
+  # Takes the appropriate action when the Mode's buffer loses the focus.
   def blur; end
+
+  # Stops any in-progress search in the Mode's buffer.
   def cancel_search!; end
+
+  # Returns true if the Mode's buffer is being searched.
   def in_search?; false end
+
+  # Returns the string that should be written to the status line.
   def status; ""; end
+
+  # Takes the appropriate action when the terminal window is resized.
   def resize(rows, cols); end
+
+  # Performs any necessary cleanup duties when the Mode's buffer is deleted.
   def cleanup
     #STDERR.puts "Mode.cleanup"
     @buffer = nil
   end
 
+  # Returns the name of an action (a method name) that is bound to the keyname *c*
+  # for this Mode, or nil if there is no such action.
   def resolve_input (c : String) : String | Nil
     ancestors.each do |classname|
       #STDERR.puts "Checking if #{classname} has a keymap"
@@ -154,6 +202,8 @@ class Mode
     nil
   end
 
+  # If there is a Mode method bound to the key *c*, calls that method and returns true;
+  # otherwise returns false.
   def handle_input(c : String) : Bool
     if action = resolve_input(c)
       send action
@@ -163,6 +213,8 @@ class Mode
     end
   end
 
+  # Returns a string containing a set of lines describing all of the
+  # key bindings for this mode and its ancestors.
   def help_text : String
     used_keys = Set(String).new
     ancestors.map do |classname|
@@ -180,8 +232,10 @@ EOS
     end.compact.join("\n")
   end
 
-### helper functions
+  # Helper functions
 
+  # Saves the contents of this Mode's buffer to the file *fn*.  If *fn*
+  # already exists, asks the user for confirmation before overwriting it.
   def save_to_file(fn : String, talk=true)
     if File.exists? fn
       unless BufferManager.ask_yes_or_no "File \"#{fn}\" exists. Overwrite?"
@@ -202,6 +256,9 @@ EOS
     end
   end
 
+  # Passes this Mode's buffer contents in a pipe to the shell *command*, and returns
+  # a tuple containing the output of the command and a Bool saying whether
+  # the command's exit status was 0 (i.e., successful).
   def pipe_to_process(command : String) : Tuple(String?, Bool)
     pipe = Pipe.new(command, [] of String, shell: true)
     output = nil
