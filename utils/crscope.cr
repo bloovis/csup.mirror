@@ -1054,6 +1054,7 @@ class Index
 	@results = entry_search(entry, partial_match: false)
 	show_results(0)
 	if @results.size > 0
+	  show_status ""
 	  c = move_to_results
 	  if c == "C-d"
 	    done = true
