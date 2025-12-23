@@ -9,7 +9,7 @@ Crscope uses different parsing strategies for Crystal and Ruby:
 * For Crystal, crscope uses the compiler's own parser.  It records information
 about classes, modules, methods, libraries, C functions, method calls, and assignments.
 
-For Ruby, crscope uses uses rough heuristics, making heavy
+* For Ruby, crscope uses uses rough heuristics, making heavy
 use of regular expressions and the indentation level of lines of code.
 It records less information than the Crystal parser: classes, modules, methods,
 and constants.
@@ -92,7 +92,10 @@ method call, C function, or the target of an assignment.
 * **Find calls by this method**: Search for all calls made by a method.
 
 * **Find calls to this method**: Search for all calls to a method.  Operator
-methods like `+` are *not* displayed.
+methods like `+` are *not* displayed.  Note: some method calls may not be
+shown; this may be due to compiler optimization or incomplete information
+about the method in the parse phase.  Use the *non-regexp search* to
+find all occurrences of the name.
 
 * **Regexp search**: Perform a regular expression (`grep -E`) search.  This
   is useful for finding all occurrences of a particular symbol that
@@ -121,8 +124,8 @@ crscope -l
 This mode is used by MicroEMACS, and it could possibly be used by other editors
 that have cscope integration.  This mode implements only the following search types:
 
-* 0 - inexact name search (partially-qualified or unqualified names)
-* 1 - exact name search (fully-qualified names)
+* 0 - find a partially-qualified or unqualified symbol
+* 1 - find the definition of partially-qualified or unqualified method name
 * 6 - regular expression search
 * 7 - file search
 
