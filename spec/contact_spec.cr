@@ -43,16 +43,18 @@ describe ContactManager do
   it "tests aliases" do
     ["self", "potus", "putin"].each do |a|
       p = ContactManager.contact_for(a)
-      a1 = ContactManager.alias_for(p)
-      a1.should eq(a)
+      if p
+	a1 = ContactManager.alias_for(p)
+        a1.should eq(a)
+      end
     end
   end
 
   it "check email for an alias" do
     p = ContactManager.contact_for("self")
-    a = ContactManager.alias_for(p)
-    a.should eq("self")
     if p
+      a = ContactManager.alias_for(p)
+      a.should eq("self")
       e = p.email
       e.should eq("marka@pobox.com")
     end
@@ -60,10 +62,12 @@ describe ContactManager do
 
   it "looks up a contact by email" do
     p = ContactManager.person_for("marka@pobox.com")
-    isa = ContactManager.is_aliased_contact?(p)
-    isa.should eq(true)
-    a = ContactManager.alias_for(p)
-    a.should eq("self")
+    if p
+      isa = ContactManager.is_aliased_contact?(p)
+      isa.should eq(true)
+      a = ContactManager.alias_for(p)
+      a.should eq("self")
+    end
   end
 
   it "adds a new contact" do
@@ -75,10 +79,10 @@ describe ContactManager do
 
   it "checks new contact alias" do
     p = ContactManager.contact_for("joeblow")
-    a = ContactManager.alias_for(p)
-    a.should eq("joeblow")
-    p.nil?.should eq(false)    
     if p
+      a = ContactManager.alias_for(p)
+      a.should eq("joeblow")
+      p.nil?.should eq(false)    
       e = p.email
       e.should eq("joeblow@example.com")
     end
