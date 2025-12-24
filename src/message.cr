@@ -25,22 +25,27 @@ module Redwood
 class ThreadCache
   singleton_class
 
+  # Creates a hash mapping thread IDs to their associated `ThreadData` object.
   def initialize
     singleton_pre_init
     @cache = Hash(String, ThreadData).new
     singleton_post_init
   end
 
+  # Returns the `ThreadData` object associated with the thread ID *threadid*.
   def get(threadid : String) : ThreadData
     @cache[threadid]
   end
   singleton_method get, threadid
 
+  # Adds a new thread ID => `ThreadData` mapping to the hash.
   def add(thread : ThreadData)
     @cache[thread.id] = thread
   end
   singleton_method add, thread
 
+  # Returns true if the cache contains a `ThreadData` object for the
+  # thread ID *threadid*.
   def cached?(threadid : String)
     @cache.has_key?(threadid)
   end
@@ -768,11 +773,12 @@ class ThreadData
   property size_widget = ""
   property date_widget = ""
 
+  # Creates thread data for *json*, which is the JSON representation of a message.
+  # There usually seems to be only one message in the array, but occasionally
+  # there is more than one.  Treats the messages after the first one as children
+  # of the first message.
   def initialize(json : JSON::Any, @id)
     #STDERR.puts "ThreadData: json #{json}"
-    # There usually seems to be only one message in the array, but occasionally
-    # there is more than one.  Treat the messages after the first one as children
-    # of the first message.
     msglist = json.as_a
     #STDERR.puts "ThreadData: msglist size #{msglist.size}"
     m = Message.new(msglist[0])
@@ -833,7 +839,7 @@ class ThreadData
     @date_widget = self.date.to_local.to_nice_s
   end
 
-  # Returns a string containing the thread ID and top-level message ID.
+  # Returns a string combining the thread ID and top-level message ID.
   # This is used for creating debug messages.
   def to_s : String
     if m = @msg
@@ -940,18 +946,25 @@ class ThreadData
     end
   end
 
+  # Returns an array of `Person` objects for each "From:" address
+  # in the thread.
   def authors : Array(Person)
     map { |m, d, p| m.from }.compact.uniq
   end
 
+  # Returns an array of `Person` objects for each "From:" and "To:
+  # address in the thread, with duplicates removed.
   def direct_participants : Array(Person)
     map { |m, d, p| [m.from] + m.to }.flatten.compact.uniq
   end
 
+  # Returns an array of `Person` objects for each "From:", "To:", "Cc:",
+  # and "Bcc:" address in the thread, with duplicates removed.
   def participants : Array(Person)
     map { |m, d, p| [m.from] + m.to + m.cc + m.bcc }.flatten.compact.uniq
   end
 
+  # Returns the most recent message in the thread.
   def latest_message : Message?
     return nil unless latest = @msg
     each do |m, d, p|
@@ -962,12 +975,13 @@ class ThreadData
     return latest
   end
 
+  # Updates notmuch with the labels for all the messages in this thread.
   def save
     Message.sync_back_labels messages
   end
 end	# ThreadData
 
-# `MsgThread` is the message thread object that is returned to all Modes that
+# `MsgThread` is the message thread object that is used by all Modes that
 # use message threads, i.e. `ThreadViewMode` and modes derived from `ThreadIndexMode`.
 # It refers to the actual cached thread data (`ThreadData`) via the thread ID.
 # This indirection ensures that there is only one copy of a `ThreadData` object
@@ -975,13 +989,17 @@ end	# ThreadData
 class MsgThread
   property id : String
 
+  # Saves the thread ID, so that it can be used later
+  # to find the associated `ThreadData` object.
   def initialize(@id)
   end
 
+  # Returns the associated `ThreadData` object from the `ThreadCache`.
   def cache : ThreadData
     ThreadCache.get(id)
   end
 
+  # Forwards all methods not explicitly defined to the associated `ThreadData` object.
   forward_missing_to cache
 end
 
