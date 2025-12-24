@@ -1,5 +1,12 @@
 module Redwood
 
+# `Pipe` provides a simplified mechanism for running an external program
+# in a pipe. Create a pipe to a program using `Pipe#new`.  Then start interacting
+# with the program using `start`.  The block you pass to `start` will
+# then use the following methods to send and receive data to/from the program:
+# * Transmit data to the program's stdin using `transmit`.
+# * Receive data from the program's stdout using `receive`.
+# * Receive data from the program's stderr using `receive_stderr`.
 class Pipe
   class PipeError < Exception
   end
@@ -10,6 +17,8 @@ class Pipe
   property error_closed = false
   @process : Process?
 
+  # Starts the program *prog* with arguments *args*, with
+  # its stdin, stdout, and stderr available to the caller.
   def initialize(prog : String, args : Array(String), shell = false)
     begin
       @process = Process.new(prog,
@@ -24,11 +33,15 @@ class Pipe
     end
   end
 
+  # Yields this Pipe object to the block, then waits for the
+  # program to exit, and returns its exit code.
   def start : Int32	# returns exit status
     yield self
     wait
   end
 
+  # Yields the file handle connected to the program's stdin,
+  # then closes that file handle when the block returns.
   def transmit(&)
     if p = @process
       yield p.input
@@ -37,6 +50,8 @@ class Pipe
     @input_closed = true
   end
 
+  # Yields the file handle connected to the program's stdout,
+  # then closes that file handle when the block returns.
   def receive(&)
     if p = @process
       yield p.output
@@ -45,6 +60,8 @@ class Pipe
     @output_closed = true
   end
 
+  # Yields the file handle connected to the program's stderr,
+  # then closes that file handle when the block returns.
   def receive_stderr(&)
     if p = @process
       yield p.error
@@ -53,6 +70,8 @@ class Pipe
     @error_closed = true
   end
 
+  # Waits for the program to exit, closes all file handles,
+  # and returns the program's exit code.
   def wait : Int32
     if p = @process
       p.input.close unless @input_closed
@@ -64,9 +83,15 @@ class Pipe
     end
   end
 
-  # Used by Notmuch.run.  `input` is an optional string to pass
-  # to notmuch's standard input.  The output of notmuch is returned
-  # as a string.
+  # Runs notmuch with the specified arguments and stdin data; used by `Notmuch.run`.
+  # Parameters:
+  # * *prog*: name of the program to run (always "notmuch").
+  # * *args*: the list of command line arguments to notmuch
+  # * *check_status*: if true, raises an exception if notmuch fails
+  # * *check_stderr*: if true, raises an exception if notmuch wrote to stderr
+  # * *input*: optional string to pass to notmuch's standard input.
+  #
+  # `run` returns the output of notmuch as a string.
   def self.run(prog : String,			# name of program to run
 	       args : Array(String),		# arguments
                check_status : Bool = true,	# raise exception if command fails
