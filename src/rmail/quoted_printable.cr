@@ -1,4 +1,4 @@
-# This code was taking from https://github.com/arcage/crystal-quotedprintable/tree/master
+# This code was taken from https://github.com/arcage/crystal-quotedprintable/tree/master
 # I was not able to do a 'shards install' on it, due to this error:
 #   shard.yml: mapping values are not allowed in this context
 
