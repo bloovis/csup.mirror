@@ -1,25 +1,28 @@
 module Redwood
 
-# This is a partial port of Ruby's shellwords.rb
+# `Shellwords` is a partial port of Ruby's `shellwords.rb`.
+# It contains methods for escaping strings so that they
+# can be passed to the shell.
 module Shellwords
   extend self
 
-  # Escapes a string so that it can be safely used in a Bourne shell
+  # Escapes the string *str* so that it can be safely used in a Bourne shell
   # command line.
   #
-  # Note that a resulted string should be used unquoted and is not
+  # Note that the resulting string should be used unquoted and is not
   # intended for use in double quotes nor in single quotes.
   #
-  #   argv = Shellwords.escape("It's better to give than to receive")
-  #   argv #=> "It\\'s\\ better\\ to\\ give\\ than\\ to\\ receive"
+  # ```
+  # argv = Shellwords.escape("It's better to give than to receive")
+  # argv #=> "It\\'s\\ better\\ to\\ give\\ than\\ to\\ receive"
+  # ```
   #
   # It is the caller's responsibility to encode the string in the right
   # encoding for the shell environment where this string is used.
   #
   # Multibyte characters are treated as multibyte characters, not as bytes.
   #
-  # Returns an empty quoted String if +str+ has a length of zero.
-
+  # Returns an empty quoted String if *str* has a length of zero.
   def escape(str : String)
     # An empty argument will be skipped, so return empty quotes.
     return "''" if str.empty?
@@ -32,17 +35,17 @@ module Shellwords
     return str.gsub(/([^A-Za-z0-9_\-.,:\/@\n])/, "\\\\\\1").gsub(/\n/, "'\n'")
   end
 
-  # Builds a command line string from an argument list, +array+.
+  # Builds a command line string from an argument list, *array*.
   #
   # All elements are joined into a single string with fields separated by a
   # space, where each element is escaped for the Bourne shell and stringified
-  # using +to_s+.
+  # using `to_s`.
   #
-  #   ary = ["There's", "a", "time", "and", "place", "for", "everything"]
-  #   argv = Shellwords.join(ary)
-  #   argv #=> "There\\'s a time and place for everything"
-  #
-
+  # ```
+  # ary = ["There's", "a", "time", "and", "place", "for", "everything"]
+  # argv = Shellwords.join(ary)
+  # argv #=> "There\\'s a time and place for everything"
+  # ```
   def join(array : Array(String)) : String
     array.map { |arg| self.escape(arg) }.join(' ')
   end
