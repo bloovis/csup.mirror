@@ -1,6 +1,17 @@
-## from: http://blade.nagaokaut.ac.jp/cgi-bin/scat.rb/ruby/ruby-talk/101949
+require "base64"
+require "../src/rmail/quoted_printable"
 
+# `Rfc2047` is a module that contains a single method for decoding a message
+# header that contains non-ASCII text.  See RFC 2047 here:
+#
+#   https://datatracker.ietf.org/doc/html/rfc2047
+#
+# Following are the comments from the original Ruby version of this code:
+#
+# from: http://blade.nagaokaut.ac.jp/cgi-bin/scat.rb/ruby/ruby-talk/101949
+#
 # $Id: rfc2047.rb,v 1.4 2003/04/18 20:55:56 sam Exp $
+#
 # MODIFIED slightly by William Morgan
 #
 # An implementation of RFC 2047 decoding.
@@ -15,10 +26,6 @@
 # Copyright (c) Sam Roberts <sroberts / uniserve.com> 2004
 #
 # This file is distributed under the same terms as Ruby.
-
-require "base64"
-require "../src/rmail/quoted_printable"
-
 module Rfc2047
   # Hack: allow space character in grouping #3.  Strictly speaking, spaces
   # should never appear in an encoded string, and should be encoded with _ or =32.
@@ -27,8 +34,8 @@ module Rfc2047
 
   def Rfc2047.is_encoded?(s); s =~ WORD end
 
-  # Decodes a string, +from+, containing RFC 2047 encoded words into a target
-  # character set, +target+. See iconv_open(3) for information on the
+  # Decodes a string, *from*, containing RFC 2047 encoded words into a target
+  # character set, *target*. See iconv_open(3) for information on the
   # supported target encodings. If one of the encoded words cannot be
   # converted to the target encoding, it is left in its encoded form.
   def Rfc2047.decode_to(target : String, from : String) : String
