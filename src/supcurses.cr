@@ -18,9 +18,13 @@ lib LibNCurses
   fun timeout(LibC::Int) : LibC::Int
 end
 
-# Ruby ncurses class is called Ncurses (lower-case c)
+# Sup used the Ruby `Ncurses` module (lower-case c) class, but
+# csup uses the Crystal `NCurses` module (upper-case c).
+# Define an alias so that we won't have to change the module name
+# for every `Ncurses` use in code ported from Sup.
 alias Ncurses = NCurses
 
+# This modules defines some additional NCurses methods for use by csup.
 module NCurses
   alias Wint_t = LibNCurses::Wint_t
 
@@ -28,6 +32,7 @@ module NCurses
   @@max_pairs = 0
   @@mouse_y = 0
 
+  # Returns the number of available colors for this terminal.
   def num_colors
     if @@num_colors = 0
       @@num_colors = `tput colors`.to_i
@@ -35,6 +40,7 @@ module NCurses
     return @@num_colors
   end
 
+  # Returns the maximum number of color pairs supported by Ncurses on this terminal.
   def max_pairs
     if @@max_pairs = 0
       @@max_pairs = `tput pairs`.to_i
@@ -42,17 +48,17 @@ module NCurses
     return @@max_pairs
   end
 
-  # Wrapper for `get_wch()`
+  # Wrapper for `get_wch`
   def get_wch(w : Wint_t) : LibC::Int
     LibNCurses.get_wch(w)
   end
 
-  # Wrapper for `init_pair()`
+  # Wrapper for `init_pair`
   def init_pair(slot : LibC::Short, foreground : LibC::Short, background : LibC::Short) : LibC::Int
     LibNCurses.init_pair(slot, foreground, background)
   end
 
-  # Wrapper for `doupdate()`
+  # Wrapper for `doupdate`
   def doupdate
     LibNCurses.doupdate
   end
@@ -77,9 +83,8 @@ module NCurses
     LibNCurses.mvwaddstr(stdscr, y, x, str.to_unsafe)
   end
 
-  # Set the cursor state
-  # Use `Cursor` enum
-  # Wrapper for `curs_set()`
+  # Wrapper for `curs_set`.  Sets the cursor state to *visibility*: 0
+  # to hide the cursor, or 1 to show the cursor.
   def curs_set(visibility : LibC::Int) : LibC::Int
     LibNCurses.curs_set(Cursor.new(visibility))
   end
@@ -99,11 +104,14 @@ module NCurses
     LibNCurses.timeout(delay)
   end
 
+  # Constants for cell attributes, colors, keys, and mouse events.
   A_NORMAL = 0
   A_BOLD = 0x200000
   A_BLINK = 0x80000
+
   BUTTON1_CLICKED = 0x4
   BUTTON1_DOUBLE_CLICKED = 0x8
+
   COLOR_DEFAULT = -1
   COLOR_BLACK = 0x0
   COLOR_RED = 0x1
@@ -113,10 +121,10 @@ module NCurses
   COLOR_MAGENTA = 0x5
   COLOR_CYAN = 0x6
   COLOR_WHITE = 0x7
-#  ERR = 0xffffffffffffffff
-  KEY_CANCEL = 0x163
 
-  # Keycodes
+#  ERR = 0xffffffffffffffff
+
+  KEY_CANCEL = 0x163
   KEY_CODE_YES = 0x100
   KEY_MOUSE = 0x199
   KEY_ENTER = 0x157
@@ -154,8 +162,10 @@ module NCurses
   KEY_RESIZE = 0x19a
 
 #  OK = 0x0
+
   REPORT_MOUSE_POSITION = 0x10000000
 
+  # Hash mapping values for Ncurses special function keys to user-friendly names.
   @@func_keynames = {
     KEY_BACKSPACE => "C-h",
     KEY_RESIZE => "C-l",
@@ -191,6 +201,8 @@ module NCurses
     KEY_F20 => "F20"
   }
 
+  # This macro creates a hash `@@consts` that maps the names of Ncurses
+  # attributes and colors to their integer values.
   macro consts(*names)
     @@consts = {
     {% for name in names %}
@@ -202,7 +214,8 @@ module NCurses
          COLOR_YELLOW, COLOR_BLUE, COLOR_MAGENTA, COLOR_CYAN,
 	 COLOR_WHITE
 
-  # Ugly hack to make sup's colormap code happy.
+  # Returns the Ncurses integer value for the color or attribute specified
+  # by *name*.  This is an ugly hack to make sup's colormap code happy.
   def const_get(name : String) : Int32
     if @@consts.has_key?(name)
       return @@consts[name]
@@ -212,6 +225,12 @@ module NCurses
     end
   end
 
+  # Converts an Ncurses key value to a string representation for the key:
+  #
+  # * a single character string for simple unmodified keys
+  # * C-x for Ctrl + x
+  # * F-n for function key n
+  # * name of key for other special keys ("Insert", "PgUp", etc.)
   def keyname(ch : Int32, function_key = false) : String
     # Ncurses.print("keyname: ch #{sprintf("0x%x", ch)}, function_key #{function_key}\n")
     if function_key
@@ -229,14 +248,18 @@ module NCurses
     end
   end
 
-  # Get a keystroke and return a string representation:
-  #  printable key: one-character string containing the key
-  #  ctrl-key:  C-<lowercase-key>
-  #  alt-key;   M-<lowercase-key>
-  #  ctrl-alt-key: C-M-<lowercase-key>
-  #  function key: name of key ("F1", "End", "Insert", "PgDn", etc.)
+  # :showdoc:
+  #
+  # This is the helper function for `getkey`.  It waits for a keystroke and
+  # returns a string representation:
+  # * printable key: one-character string containing the key
+  # * ctrl-key:  C-lowercase-key
+  # * alt-key;   M-lowercase-key
+  # * ctrl-alt-key: C-M-lowercase-key
+  # * function key: name of key ("F1", "End", "Insert", "PgDn", etc.)
+  #
   # Simple left button mouse clicks are also handled, returning
-  # either "click" or "doubleclick".  Use the getmouse_y method
+  # either "click" or "doubleclick".  Use the `getmouse_y` method
   # to get the row number of the click.
   protected def do_getkey(prefix = "") : String
     if (result = LibNCurses.get_wch(out ch)) == ERR
@@ -269,8 +292,9 @@ module NCurses
     end
   end
 
-  # Get a key, or return "ERR" if a timeout occurs.  `delay` specifies
-  # the timeout value in milliseconds, or -1 (default) to disable the timeout.
+  # Gets a key, and returns it as a string (see `do_getkey`) or returns "ERR"
+  # if a timeout occurs. *delay* specifies the timeout value in milliseconds,
+  # or -1 (default) to disable the timeout.
   def getkey(delay = -1)
     timeout(delay)
     s = do_getkey
@@ -278,6 +302,7 @@ module NCurses
     return s
   end
 
+  # Returns the row number of the most recent mouse click or doubleclick event.
   def getmouse_y
     @@mouse_y
   end
@@ -285,14 +310,14 @@ module NCurses
   class Window
     # Set a window's attributes
     #
-    # Wrapper for `wattrset()` (`attrset()`)
+    # Wrapper for `wattrset` (`attrset`)
     def attrset(attr)
       LibNCurses.wattrset(self, Attribute.new(attr.to_u32))
     end
 
     # Add string to window and move cursor
     #
-    # Wrapper for `mvwaddstr()` (`mvaddstr()`)
+    # Wrapper for `mvwaddstr` (`mvaddstr`)
     def mvaddstr(y, x, str)
       if LibNCurses.mvwaddstr(self, y, x, str.scrub.to_unsafe) == ERR
 	#raise "mvwaddstr error y=#{y} x=#{x} str='#{str}'"
@@ -302,7 +327,7 @@ module NCurses
 
     # Copy window to virtual screen
     #
-    # Wrapper for `wnoutrefresh()` (`noutrefresh()`)
+    # Wrapper for `wnoutrefresh` (`noutrefresh`)
     def noutrefresh
       raise "wnoutrefresh error" if LibNCurses.wnoutrefresh(self) == ERR
     end
@@ -315,6 +340,7 @@ module Redwood
 
   @@cursing = false
 
+  # Changes the terminal state to Ncurses mode.
   def self.start_cursing
     Ncurses.start
     Ncurses.cbreak
@@ -333,6 +359,7 @@ module Redwood
     @@cursing = true
   end
 
+  # Ends Ncurses mode, restoring the terminal to its original state.
   def self.stop_cursing
     return unless @@cursing
     Ncurses.curs_set 1
@@ -341,6 +368,7 @@ module Redwood
     @@cursing = false
   end
 
+  # Returns true if the terminal is in Ncurses mode.
   def self.cursing
     @@cursing
   end
