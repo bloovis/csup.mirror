@@ -5,13 +5,12 @@ require "./keymap"
 
 module Redwood
 
-## Implements a single undo list for the Sup instance
-##
-## The basic idea is to keep a list of lambdas to undo
-## things. When an action is called (such as 'archive'),
-## a lambda is registered with UndoManager that will
-## undo the archival action
-
+# `UndoManager` is a singleton class that implements a single undo list.
+#
+# The basic idea is to keep a list of lambdas to undo
+# things. When an action is called (such as `archive`),
+# a lambda is registered with `UndoManager` that will
+# undo the archival action.
 class UndoManager
   singleton_class
 
@@ -26,26 +25,30 @@ class UndoManager
     singleton_post_init
   end
 
-  # Because Crystal doesn't have way to test for the existence of a block,
-  # like Ruby's block_given, we provide two entry points for register: one that
-  # takes a block and one that doesn't.
-  def do_register(desc : String, block_given = true, *actions, &block : Action)
+  # `do_register` is the underlying implementation for `register`.
+  # It creates a set of actions comprising *actions* and `block`,
+  # and forms an undo operation as a tuple consisting of the
+  # the description *desc* and the set of actions. It then
+  # pushs this undo operation onto the undo stack.
+  protected def do_register(desc : String, *actions, &block : Action)
     a = Array(Action).new
     actions.map {|action| a << action}
-    if block_given
-      a << block
-    end
+    a << block
     @actionlist.push({desc: desc, actions: a})
   end
 
+  # Registers a set of undo actions to be undone as a single operation.
+  # An action is a `Proc(Nil)`, i.e. a method that takes
+  # no parameters.  *actions* lists zero or more actions,
+  # and the supplied block is another action to add to the set.
+  # *desc* is a string describing the undo operation.
   def self.register(desc, *actions, &b)
-    instance.do_register(desc, true, *actions, &b)
+    instance.do_register(desc, *actions, &b)
   end
 
-  def self.register(desc, *actions)
-    instance.do_register(desc, false, *actions) {}
-  end
-
+  # Pops the most recent undo operation from the stack and calls
+  # each action in the operation's action set.  It also displays
+  # a message using the operation's description string.
   def undo
     unless @actionlist.empty?
       actionset = @actionlist.pop
@@ -66,7 +69,7 @@ class UndoManager
       end
     end
   end
-  singleton_method undo, b
+  singleton_method undo
 
   def clear
     @actionlist = [] of UndoEntry
