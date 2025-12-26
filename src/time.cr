@@ -1,23 +1,26 @@
 require "./util"
 require "./config"
 
+# Here we have some additions to `Time` that are either new features
+# needed by csup, or are Ruby compatibility methods.
 struct Time
+  # Returns a `Time` representing the current local time.
   def self.now
     local
   end
 
+  # Returns this `Time` expressed as a large integer.
   def to_i
     to_unix
   end
 
+  # Returns a string representing this `Time`, using
+  # *format* to construct the string.
   def strftime(format)
     to_s(format)
   end
 
-  def to_indexable_s
-    sprintf "%012d", self.to_unix
-  end
-
+  # Returns a new `Time` representing this `Time` rounded to the nearest hour.
   def nearest_hour
     if minute < 30
       self
@@ -26,18 +29,23 @@ struct Time
     end
   end
 
+  # Returns a Time object representing the previous midnight.
   def midnight # within a second
     self - Time::Span.new(hours: hour, minutes: minute, seconds: second)
   end
 
+  # Returns true if the time *other* is on the same day as this `Time`.
   def is_the_same_day?(other : Time)
     (midnight - other.midnight).to_i.abs < 1
   end
 
+  # Returns true if *other* is in the day before this `Time`.
   def is_the_day_before?(other : Time)
     (0..24 * 60 * 60 + 1).includes?((other.midnight - midnight).to_i)
   end
 
+  # Returns a human-friendly string representing the distance between
+  # *from* and this `Time`.  If *from* is not specified, uses local time instead.
   def to_nice_distance_s(from = Time.local)
     diff_i = self.to_unix - from.to_unix
     later_than = diff_i < 0
@@ -72,12 +80,8 @@ struct Time
 
   TO_NICE_S_MAX_LEN = 9 # e.g. "Yest.10am"
 
-  ## This is how a thread date is displayed in thread-index-mode
+  # Returns a human-friendly string representing this `Time`.
   def to_nice_s(from=Time.local)
-    default_to_nice_s(from)
-  end
-
-  def default_to_nice_s(from=Time.local)
     if year != from.year
       strftime "%b %Y"
     elsif month != from.month
@@ -100,7 +104,12 @@ struct Time
     end
   end
 
-  ## This is how a message date is displayed in thread-view-mode
+  # Returns a longer human-friendly string representing this `Time`.
+  # This is how a message date is displayed in `ThreadViewMode`.
+  #
+  # You can influence the format by setting the `time_mode` variable
+  # in the config file `~/.csup/config.yaml`.  If `time_mode` is "24h",
+  # a 24-hour time format is used; otherwise a 12-hour format is used.
   def to_message_nice_s(from=Time.local)
     if Redwood::Config.has_key?(:time_mode)
       time_mode = Redwood::Config.str(:time_mode)
