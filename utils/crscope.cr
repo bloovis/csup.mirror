@@ -132,7 +132,7 @@ class FileRecords
       column = get_column(node)
       context = get_context(node)
       @fdefs.add_name(type, name, lineno, column, context)
-      #puts [type, name, location, context].join("#")
+      #puts [type, name, location, context].join("\x01")
       #puts "key for #{type} is #{RECORD_TYPES.key_for?(type)}"
       return name.to_s
     end
@@ -143,7 +143,7 @@ class FileRecords
       column = get_column(node)
       context = get_context(node)
       @fdefs.add_name(type, name, lineno, column, context)
-      #puts [type, name, location, context].join("#")
+      #puts [type, name, location, context].join("\x01")
       #puts "key for #{type} is #{RECORD_TYPES.key_for?(type)}"
       return name.to_s
     end
@@ -155,7 +155,7 @@ class FileRecords
       column = get_column(node)
       context = get_context(node)
       @fdefs.add_name(type, name, lineno, column, context)
-      #puts [type, names, location, context].join("#")
+      #puts [type, names, location, context].join("\x01")
       #puts "key for #{type} is #{RECORD_TYPES.key_for?(type)}"
       return names
     end
@@ -223,7 +223,7 @@ class FileRecords
 	name = "<unknown>"
       end
       @fdefs.add_name(:assign, name, lineno, column, context)
-      #puts ["A", name, location, context].join("#")
+      #puts ["A", name, location, context].join("\x01")
       true
     end
 
@@ -264,7 +264,7 @@ class FileRecords
       name = @defs.pop?
       if name
 	@fdefs.add_name(:end, name, 0, 0, "")
-	#puts ["E", name, "", ""].join("#")
+	#puts ["E", name, "", ""].join("\x01")
       end
     end
 
@@ -423,7 +423,7 @@ class FileRecords
     dprint "FileRecords.print"
     records.each do |r|
       f.puts [RECORD_TYPES[r.type], r.name, "#{@filename}:#{r.lineno}:#{r.indent+1}",
-	      r.context].join("#")
+	      r.context].join("\x01")
     end
   end
 end
@@ -493,7 +493,7 @@ class Index
   def read_database(infile : String)
     File.open(infile, "r") do |f|
       f.each_line(chomp: true) do |line|
-        splits = line.split("#")
+        splits = line.split("\x01")
 	kind = splits[0]
 	type = FileRecords::RECORD_TYPES.key_for?(kind) || :symbol
 	name = splits[1]
