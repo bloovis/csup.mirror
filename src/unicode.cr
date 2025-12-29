@@ -7,9 +7,12 @@ lib LibC
   fun wcwidth(c : WChar) : Int
 end
 
+# The `Unicode` module provides the barest minimum compatibility
+# with the Ruby version that is required by csup.
 module Unicode
   extend self
 
+  # Returns the display width of a UTF-8 character string.
   def width(s : String) : Int32
     width = 0
     chreader = Char::Reader.new(s)
