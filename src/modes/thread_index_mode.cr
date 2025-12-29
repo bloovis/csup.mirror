@@ -96,7 +96,7 @@ class ThreadIndexMode < LineCursorMode
   # both refer to the same Notmuch thread.  So we have to find a matching thread
   # based on thread ID.
   def get_update_thread(*args) : MsgThread?
-    t = args[1]?
+    t = args[0]?
     #STDERR.puts "get_update_thread: t = #{t}"
     if t && t.is_a?(MsgThread)
       #STDERR.puts "get_update_thread: searching for thread id #{t.id}"
@@ -112,7 +112,7 @@ class ThreadIndexMode < LineCursorMode
   # Similar to get_update_thread, except it returns the sender's thread,
   # not the matching thread in this thread list.
   def get_sender_thread(*args) : MsgThread?
-    t = args[1]?
+    t = args[0]?
     #STDERR.puts "get_update_thread: t = #{t} (#{t.class.name})"
     if t && t.is_a?(MsgThread)
       return t
@@ -127,7 +127,7 @@ class ThreadIndexMode < LineCursorMode
   def handle_updated_update(*args)
     # Get the new thread containing the draft message, and
     # the matching existing thread in the thread list.
-    return unless (t = args[1]?) && t.is_a?(MsgThread)
+    return unless (t = args[0]?) && t.is_a?(MsgThread)
     return unless msg = t.msg
     #STDERR.puts "handle_updated_update: new thread id #{t.id}"
     return unless (ts = @ts) && (oldt = ts.find_thread(t))
@@ -235,7 +235,7 @@ class ThreadIndexMode < LineCursorMode
   def handle_poll_update(*args)
     return if @translated_query.empty?
     #STDERR.puts "handle_poll_update started"
-    arg = args[1]?
+    arg = args[0]?
     if arg && arg.is_a?(String) && (ts = @ts)
       # arg is a search term like "lastmod:X..Y"
       #STDERR.puts "handle_poll_update: search terms #{arg}, translated query #{@translated_query}"
