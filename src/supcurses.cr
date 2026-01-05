@@ -48,11 +48,6 @@ module NCurses
     return @@max_pairs
   end
 
-  # Wrapper for `get_wch`
-  def get_wch(w : Wint_t) : LibC::Int
-    LibNCurses.get_wch(w)
-  end
-
   # Wrapper for `init_pair`
   def init_pair(slot : LibC::Short, foreground : LibC::Short, background : LibC::Short) : LibC::Int
     LibNCurses.init_pair(slot, foreground, background)
