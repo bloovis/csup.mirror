@@ -1019,11 +1019,11 @@ class Index
 	      end
 	    end
 	  end
-	  #if prefix.size == 0
-	  #  suffix = ""
-	  #else
-	  #  suffix = longest[prefix.size..]
-	  #end
+	  if prefix.size == 0
+	    suffix = ""
+	  else
+	    suffix = longest[prefix.size..]
+	  end
 	end
 	suffix
       end # End of completion code.
