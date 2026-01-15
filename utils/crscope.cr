@@ -252,6 +252,19 @@ class FileRecords
       true
     end
 
+    def visit(node : Crystal::EnumDef)
+      name = multi_name(:symbol, node)
+      @scope << name
+      node.members.each do |n|
+        #puts "enum member #{n.class}"
+        if n.is_a?(Crystal::Arg)
+          #puts "enum member #{n.name}"
+	  single_name(:symbol, n)
+	end
+      end
+      @scope.pop?
+    end
+
     def visit(node : Crystal::InstanceVar | Crystal::ReadInstanceVar | Crystal::ClassVar |
                      Crystal::Global | Crystal::OpAssign | Crystal::MultiAssign |
 		     Crystal::Var)
