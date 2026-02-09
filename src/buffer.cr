@@ -112,7 +112,7 @@ class Buffer
   # screen; that is done by the `doupdate` call in `BufferManager.draw_screen`.
   def commit
     @dirty = false
-    @w.noutrefresh
+    Ncurses.wnoutrefresh(@w)
   end
 
   # Redraws the entire buffer, including the specified status line.
@@ -136,14 +136,14 @@ class Buffer
   def write(y, x, s, opts = Opts.new)
     return if x >= @width || y >= @height
 
-    @w.attrset Colormap.color_for(opts.sym(:color) || :none, opts.bool(:highlight))
+    Ncurses.wattrset @w, Colormap.color_for(opts.sym(:color) || :none, opts.bool(:highlight))
     s ||= ""
     maxl = @width - x # maximum display width width
 
     # fill up the line with blanks to overwrite old screen contents
-    @w.mvaddstr(y, x, " " * maxl) unless opts.bool(:no_fill)
+    Ncurses.mvwaddstr(@w,y, x, " " * maxl) unless opts.bool(:no_fill)
 
-    @w.mvaddstr y, x, s.slice_by_display_length(maxl)
+    Ncurses.mvwaddstr @w, y, x, s.slice_by_display_length(maxl)
   end
 
   # Clears the entire Ncurses window with blanks.
@@ -958,7 +958,7 @@ class BufferManager
 
     ## this magic makes Ncurses get the new size of the screen
     Ncurses.endwin
-    Ncurses.stdscr.keypad true
+    Ncurses.keypad(true)
     Ncurses.curs_set 0
     Ncurses.refresh
     #@sigwinch_mutex.synchronize { @sigwinch_happened = false }
@@ -1124,7 +1124,7 @@ class BufferManager
       #Ncurses.sync do
         Ncurses.endwin
         success = system command
-        Ncurses.stdscr.keypad true
+        Ncurses.keypad(true)
         Ncurses.refresh
         Ncurses.curs_set 0
       #end

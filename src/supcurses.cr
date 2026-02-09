@@ -1,36 +1,191 @@
-# Ncurses functions used by sup that are missing in the NCurses shard.
+# This file contains an stripped-down version of the ncurses shard,
+# restructured to resemble the Ruby ncurses gem, for sup compatibility.
 
-require "../lib/ncurses/src/ncurses"
 require "./util"
 
-# Extend the LibNcurses library.
+# Interface to the C ncursesw library.
+@[Link("ncursesw")]
 lib LibNCurses
   alias Wint_t = Int32
+  type Window = Void*
 
+  # Background values
+  A_NORMAL = 0x0
+  A_REVERSE = 0x40000
+
+  # Keys
+  KEY_CANCEL = 0x163
+  KEY_CODE_YES = 0x100
+  KEY_MOUSE = 0x199
+  KEY_ENTER = 0x157
+  KEY_BACKSPACE = 0x107
+  KEY_UP = 0x103
+  KEY_DOWN = 0x102
+  KEY_LEFT = 0x104
+  KEY_RIGHT = 0x105
+  KEY_PPAGE = 0x153
+  KEY_NPAGE = 0x152
+  KEY_HOME = 0x106
+  KEY_END = 0x168
+  KEY_IC = 0x14b
+  KEY_DC = 0x14a
+  KEY_F1 = 0x109
+  KEY_F2 = 0x10a
+  KEY_F3 = 0x10b
+  KEY_F4 = 0x10c
+  KEY_F5 = 0x10d
+  KEY_F6 = 0x10e
+  KEY_F7 = 0x10f
+  KEY_F8 = 0x110
+  KEY_F9 = 0x111
+  KEY_F10 = 0x112
+  KEY_F11 = 0x113
+  KEY_F12 = 0x114
+  KEY_F13 = 0x115
+  KEY_F14 = 0x116
+  KEY_F15 = 0x117
+  KEY_F16 = 0x118
+  KEY_F17 = 0x119
+  KEY_F18 = 0x11a
+  KEY_F19 = 0x11b
+  KEY_F20 = 0x11c
+  KEY_RESIZE = 0x19a
+
+  @[Flags]
+  enum Mouse : LibC::ULong
+    Position = 0o2_000_000_000
+    B1Clicked = 0o4
+    B1DoubleClicked = 0o10
+    AllEvents = 0o1_777_777_777
+  end
+
+  struct MEVENT
+    id : LibC::Short     # ID for each device
+    x, y, z : LibC::Int  # Coordinates
+    bstate : Mouse       # State bits
+  end
+
+  # General functions
+  fun initscr : Window
+  fun endwin : LibC::Int
+
+  # General window functions
+  fun getmaxy(window : Window) : LibC::Int
+  fun getmaxx(window : Window) : LibC::Int
+  fun wmove(window : Window, row : LibC::Int, col : LibC::Int) : LibC::Int
+  fun wrefresh(window : Window) : LibC::Int
+  fun wclrtoeol(window : Window) : LibC::Int
+  fun wclrtobot(window : Window) : LibC::Int
   fun getbegx(window : Window) : LibC::Int
   fun getbegy(window : Window) : LibC::Int
+
+  # Input option functions
+  fun nl : LibC::Int
+  fun nonl : LibC::Int
+  fun cbreak : LibC::Int
+  fun nocbreak : LibC::Int
+  fun echo : LibC::Int
+  fun noecho : LibC::Int
+  fun raw : LibC::Int
+
+  # Window input option function
+  fun keypad(window : Window, value : Bool)
+
+  # Input functions
+  fun wget_wch(window : Window, ch : Wint_t*) : LibC::Int
   fun get_wch(Wint_t*) : LibC::Int
-  fun doupdate : LibC::Int
+
+  # Window background functions
+  fun wbkgdset(window : Window, char : LibC::UInt)
+
+  # Window output
+  fun waddstr(window : Window, str : LibC::Char*) : LibC::Int
+  fun waddch(window : Window, chr : LibC::Char)
+  fun wattrset(window : Window, attr : LibC::Int) : LibC::Int
   fun wnoutrefresh(window : Window) : LibC::Int
+  fun mvwaddstr(window : Window, y : LibC::Int, x : LibC::Int, str : LibC::Char*) : LibC::Int
+
+  # Mouse functions
+  fun mousemask(new_mask : LibC::ULong, old_mask : LibC::ULong*) : LibC::ULong
+  fun getmouse(event : MEVENT*) : LibC::Int
+
+  # Color functions
   fun COLOR_PAIR(LibC::Int) : LibC::Int
+  fun start_color : LibC::Int
+  fun use_default_colors : LibC::Int
+
+  # Other functions
+  fun doupdate : LibC::Int
+  fun init_pair(slot : LibC::Short, foreground : LibC::Short, background : LibC::Short) : LibC::Int
   fun attrset(LibC::Int) : LibC::Int
   fun clrtoeol : LibC::Int
   fun timeout(LibC::Int) : LibC::Int
+  fun curs_set(visibility : LibC::Int) : LibC::Int
 end
 
-# Sup used the Ruby `Ncurses` module (lower-case c) class, but
-# csup uses the Crystal `NCurses` module (upper-case c).
-# Define an alias so that we won't have to change the module name
-# for every `Ncurses` use in code ported from Sup.
-alias Ncurses = NCurses
+# The `Ncurses` module is an attempt to duplicate enough of the
+# functionality of the Ruby ncurses gem, as used by sup and now by csup.
+# It also contains methods specific to csup, especially the ones related to
+# the key naming feature, which differs from sup.
+module Ncurses
+  # (w)get_wch error value.
+  ERR = -1
 
-# This modules defines some additional NCurses methods for use by csup.
-module NCurses
   alias Wint_t = LibNCurses::Wint_t
+  alias Window = LibNCurses::Window
 
   @@num_colors = 0
   @@max_pairs = 0
   @@mouse_y = 0
+  @@stdscr
+  @@current_mask : LibC::ULong = 0
+  extend self
+
+  # Wrapper for initscr
+  def initscr
+    @@stdscr = LibNCurses.initscr
+  end
+
+  # Start curses mode
+  # Wrapper for `initscr()`
+  def start
+    initscr
+  end
+
+  # Returns stdscr.
+  def stdscr
+    scr = @@stdscr
+    if scr.nil?
+      raise "stdscr: initscr has not been called yet!"
+    end
+    return scr
+  end
+
+  # Disable buffering, key input is returned with no delay
+  # Wrapper for `cbreak()`
+  def cbreak
+    LibNCurses.cbreak
+  end
+
+  # Wrapper for `noecho()`
+  def no_echo
+    LibNCurses.noecho
+  end
+
+  # Wrapper for `keypad()`
+  def keypad(value : Bool)
+    LibNCurses.keypad(stdscr, value)
+  end
+
+  # Wrapper for `raw()`
+  def raw
+    LibNCurses.raw
+  end
+
+  # Wrapper for `nonl()`
+  def nonl
+    LibNCurses.nonl
+  end
 
   # Returns the number of available colors for this terminal.
   def num_colors
@@ -73,15 +228,25 @@ module NCurses
     LibNCurses.attrset(attr)
   end
 
+  # Wrapper for `attrset`
+  def wattrset(window : Window, attr : LibC::Int) : LibC::Int
+    LibNCurses.wattrset(window, attr)
+  end
+
   # Wrapper for `mvaddstr`
   def mvaddstr(y : LibC::Int, x : LibC::Int, str : String) : LibC::Int
     LibNCurses.mvwaddstr(stdscr, y, x, str.to_unsafe)
   end
 
+  # Wrapper for `mvwaddstr`
+  def mvwaddstr(window : Window, y : LibC::Int, x : LibC::Int, str : String) : LibC::Int
+    LibNCurses.mvwaddstr(window, y, x, str.to_unsafe)
+  end
+
   # Wrapper for `curs_set`.  Sets the cursor state to *visibility*: 0
   # to hide the cursor, or 1 to show the cursor.
   def curs_set(visibility : LibC::Int) : LibC::Int
-    LibNCurses.curs_set(Cursor.new(visibility))
+    LibNCurses.curs_set(visibility)
   end
 
   # Wrapper for `clrtoeol`
@@ -97,6 +262,48 @@ module NCurses
   # Wrapper for `timeout`
   def timeout(delay : LibC::Int) : LibC::Int
     LibNCurses.timeout(delay)
+  end
+
+  # Wrapper for `wnoutrefresh`
+  def wnoutrefresh(window : Window) : LibC::Int
+    LibNCurses.wnoutrefresh(window)
+  end
+
+  # Wrapper for `wrefresh(stdscr)`
+  def refresh : LibC::Int
+    LibNCurses.wrefresh(stdscr)
+  end
+
+  # Wrapper for `start_color()`
+  def start_color
+    LibNCurses.start_color
+  end
+
+  # Wrapper for `use_default_colors()`
+  def use_default_colors
+    LibNCurses.use_default_colors
+  end
+
+  # Sets the mouse events that should be returned
+  # Should be given a `Mouse` enum
+  def mouse_mask(new_mask : LibNCurses::Mouse)
+    @@current_mask = LibNCurses.mousemask(new_mask, pointerof(@@current_mask))
+  end
+
+  # Wrapper for `getmouse()`
+  def get_mouse : MEVENT?
+    return nil if LibNCurses.getmouse(out event) == ERR
+    return event
+  end
+
+  # Wrapper for `wmove(stdscr)`
+  def move(row : LibC::Int, col : LibC::Int) : LibC::Int
+    LibNCurses.wmove(stdscr, row, col)
+  end
+
+  # Wrapper for `endwin()`
+  def end
+    LibNCurses.endwin
   end
 
   # Constants for cell attributes, colors, keys, and mouse events.
@@ -262,11 +469,12 @@ module NCurses
     end
     if result == Ncurses::KEY_CODE_YES
       if ch == KEY_MOUSE
-        if mouse = NCurses.get_mouse
-          @@mouse_y = mouse.coordinates[:y]
-	  if mouse.state.includes?(Mouse::B1DoubleClicked)
+        if mouse = Ncurses.get_mouse
+	  #STDERR.puts "mouse x #{mouse.x}, y #{mouse.y}, bstate #{mouse.bstate}"
+          @@mouse_y = mouse.y
+	  if mouse.bstate.includes?(LibNCurses::Mouse::B1DoubleClicked)
 	    return "doubleclick"
-	  elsif mouse.state.includes?(Mouse::B1Clicked)
+	  elsif mouse.bstate.includes?(LibNCurses::Mouse::B1Clicked)
 	    return "click"
 	  end
 	end
@@ -302,34 +510,14 @@ module NCurses
     @@mouse_y
   end
 
-  class Window
-    # Set a window's attributes
-    #
-    # Wrapper for `wattrset` (`attrset`)
-    def attrset(attr)
-      LibNCurses.wattrset(self, Attribute.new(attr.to_u32))
-    end
+  # Returns a `MouseEvent` containing the mouse state and coordinates
+  # Wrapper for `getmouse()`
+  def get_mouse
+    return nil if LibNCurses.getmouse(out event) == ERR
+    return event
+  end
 
-    # Add string to window and move cursor
-    #
-    # Wrapper for `mvwaddstr` (`mvaddstr`)
-    def mvaddstr(y, x, str)
-      if LibNCurses.mvwaddstr(self, y, x, str.scrub.to_unsafe) == ERR
-	#raise "mvwaddstr error y=#{y} x=#{x} str='#{str}'"
-	STDERR.puts "mvwaddstr error y=#{y} x=#{x} str='#{str}'"
-      end
-    end
-
-    # Copy window to virtual screen
-    #
-    # Wrapper for `wnoutrefresh` (`noutrefresh`)
-    def noutrefresh
-      raise "wnoutrefresh error" if LibNCurses.wnoutrefresh(self) == ERR
-    end
-
-  end	# Window
-
-end	# NCurses
+end	# Ncurses
 
 module Redwood
 
@@ -348,7 +536,7 @@ module Redwood
     Ncurses.start_color
     Ncurses.use_default_colors
     if Config.bool(:mouse)
-      NCurses.mouse_mask(NCurses::Mouse::AllEvents | NCurses::Mouse::Position)
+      Ncurses.mouse_mask(LibNCurses::Mouse::AllEvents | LibNCurses::Mouse::Position)
     end
     #Ncurses.prepare_form_driver
     @@cursing = true

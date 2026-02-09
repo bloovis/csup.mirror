@@ -11,8 +11,6 @@ targets:
 dependencies:
   email:
     github: bloovis/crystal-email
-  ncurses:
-    github: SamualLB/ncurses
 
 crystal: 0.28.0
 
