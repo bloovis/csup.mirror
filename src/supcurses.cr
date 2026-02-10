@@ -167,6 +167,11 @@ module Ncurses
     LibNCurses.cbreak
   end
 
+  # Wrapper for `echo()`
+  def echo
+    LibNCurses.echo
+  end
+
   # Wrapper for `noecho()`
   def no_echo
     LibNCurses.noecho

@@ -791,7 +791,7 @@ class Index
 		       gsub("%f", filename)
       Ncurses.endwin
       success = system command
-      Ncurses.stdscr.keypad true
+      Ncurses.keypad(true)
       Ncurses.refresh
       Ncurses.curs_set 1
       #Ncurses.mvaddstr 0, 0, "Editor returned #{success}"
