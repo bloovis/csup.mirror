@@ -10,6 +10,10 @@ csup : $(wildcard src/*.cr) $(wildcard src/modes/*.cr)
 	./get_version.rb
 	crystal build --no-color --error-trace -D MAIN src/csup.cr
 
+csup.release : $(wildcard src/*.cr) $(wildcard src/modes/*.cr)
+	./get_version.rb
+	crystal build --no-color --error-trace -D MAIN --release -o csup.release src/csup.cr
+
 crscope : utils/crscope.cr
 
 guidesetup :
