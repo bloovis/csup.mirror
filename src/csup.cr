@@ -21,14 +21,6 @@ require "./modes/label_search_results_mode"
 require "./modes/label_list_mode"
 require "../version"
 
-# We have to set the locale so that ncurses will work correctly
-# with UTF-8 strings.
-lib Locale
-  # LC_CTYPE is probably 0 (at least in glibc)
-  LC_CTYPE = 0
-  fun setlocale(category : Int32, locale : LibC::Char*) : LibC::Char*
-end
-
 module Redwood
   BASE_DIR = File.join(ENV["HOME"], ".csup")
 
@@ -307,7 +299,6 @@ end
 
 # This is the main program of csup.
 def main
-  Locale.setlocale(Locale::LC_CTYPE, "")
   init_managers
 
   start_cursing

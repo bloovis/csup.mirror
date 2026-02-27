@@ -524,12 +524,21 @@ module Ncurses
 
 end	# Ncurses
 
+# We have to set the locale so that ncurses will work correctly
+# with UTF-8 strings.
+lib Locale
+  # LC_CTYPE is probably 0 (at least in glibc)
+  LC_CTYPE = 0
+  fun setlocale(category : Int32, locale : LibC::Char*) : LibC::Char*
+end
+
 module Redwood
 
   @@cursing = false
 
   # Changes the terminal state to Ncurses mode.
   def self.start_cursing
+    Locale.setlocale(Locale::LC_CTYPE, "")
     Ncurses.start
     Ncurses.cbreak
     Ncurses.no_echo
