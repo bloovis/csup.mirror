@@ -235,7 +235,7 @@ class FileRecords
 
     def visit(node : Crystal::Call)
       # Don't bother recording operator calls like + or == .
-      if node.name =~ /^[@_A-Za-z0-9]+$/
+      if node.name =~ /^[@_A-Za-z0-9]+=?$/
 	unscoped_single_name(:call, node)
       end
 
