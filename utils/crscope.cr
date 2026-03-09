@@ -210,7 +210,7 @@ class FileRecords
       true
     end
 
-    def visit(node : Crystal::Assign)
+    def visit(node : Crystal::Assign | Crystal::OpAssign)
       lineno = get_lineno(node)
       column = get_column(node)
       context = get_context(node)
@@ -234,8 +234,9 @@ class FileRecords
     end
 
     def visit(node : Crystal::Call)
-      # Don't bother recording operator calls like + or == .
-      if node.name =~ /^[@_A-Za-z0-9]+=?$/
+      # Only look at ordinary alphanumber names, possibly ending
+      # in = or ?.
+      if node.name =~ /^[@_A-Za-z0-9]+[=?]?$/
 	unscoped_single_name(:call, node)
       end
 
@@ -542,9 +543,14 @@ class Index
   end
 
   def search(name : String, search_type : Symbol, partial_match = false) : Array(Result)
+    # Make name lower case if the user wanted to ignore case.
     if @ignore_case
       name = name.downcase
     end
+
+    # Replace "?" with "\?" for the regular expression match.
+    name = name.gsub("?", "\\?")
+
     results = [] of Result
     fdefs.each do |filename, fdef|
       in_method = false
@@ -960,7 +966,7 @@ class Index
       when "C-u"
         e.buf = ""
 	pos = 0
-      when "?"
+      when "*"
         if e.type == :symbol || e.type == :function ||
 	   e.type == :calledby || e.type == :calling
 	  suffix = yield
@@ -1007,7 +1013,7 @@ class Index
     until done
       entry = entries[entry_number]
       c = get_entry(entry) do
-        # User hit ?, so try to do a completion.
+        # User hit *, so try to do a completion.
 	# First, get all partial matches.
 	@results = entry_search(entry, partial_match: true)
 	show_results(0)

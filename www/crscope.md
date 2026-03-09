@@ -28,7 +28,7 @@ simple naming scheme.
 Crscope has several features that are missing in cscope:
 
 * **Completions**:  If you
-press `?`  while entering a symbol search field, crscope will display a list of
+press `*`  while entering a symbol search field, crscope will display a list of
 possible names, and will also insert as many characters as necessary
 to give the longest possible match.  Completions are *not* allowed
 for non-symbol searches.
@@ -69,7 +69,7 @@ In each section, you can move from one line to another using
 the Down, Up, `C-n`, and `C-p` keys.
 
 In the search entry fields, you can use EMACS-style editing keys.  In symbol
-searches, hit the `?` key to show partial matches in the search results,
+searches, hit the `*` key to show partial matches in the search results,
 or hit `Enter` to perform a more precise search.
 
 In the search results section, hit the `Enter` key to run your editor on
