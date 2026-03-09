@@ -548,8 +548,8 @@ class Index
       name = name.downcase
     end
 
-    # Replace "?" with "\?" for the regular expression match.
-    name = name.gsub("?", "\\?")
+    # Escape any metacharacters in the name.
+    name = Regex.escape(name)
 
     results = [] of Result
     fdefs.each do |filename, fdef|
