@@ -771,7 +771,6 @@ class ThreadData
   property size = 0
   property subj = "<no subject>"
   property size_widget = ""
-  property date_widget = ""
 
   # Creates thread data for *json*, which is the JSON representation of a message.
   # There usually seems to be only one message in the array, but occasionally
@@ -801,7 +800,10 @@ class ThreadData
       else
         "(#{self.size})"
       end
-    @date_widget = self.date.to_local.to_nice_s
+  end
+
+  def date_widget : String
+    self.date.to_local.to_nice_s
   end
 
   # Reloads message thread data with body and html content.  This involves
@@ -836,7 +838,6 @@ class ThreadData
       msg.thread = self
       @size += 1
     end
-    @date_widget = self.date.to_local.to_nice_s
   end
 
   # Returns a string combining the thread ID and top-level message ID.
