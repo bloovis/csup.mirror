@@ -125,7 +125,7 @@ should be a verified sender.
 If true, and you use words like "attach", "attachment", or
 "attached" in your email and don't have any attachments, Csup will
 prompt you before sending. This will be true when a default 
-`config.yaml` is generated, but are considered false if not 
+`config.yaml` is generated, but is considered false if not 
 explicitly specified. 
 
 ### Confirm top posting
