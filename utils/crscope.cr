@@ -7,13 +7,16 @@
 # line-oriented interface of cscope, but I also implemented
 # the curses-oriented interface for using outside of an editor.
 #
-# The four search types that crscope implements are:
+# The eight search types that crscope implements are:
 #
 # 0 - Find any symbol
 # 1 - Find a method definition
-# 4 - Find a string (non-regexp)
-# 6 - Perform an egrep search.
+# 2 - Find methods called by a method
+# 3 - Find methods calling a method
+# 4 - Perform a grep -F (non-regexp) search
+# 6 - Perform an grep -E (regexp) search.
 # 7 - Perform a file search.
+# 9 - Find assignments to a symbol
 #
 # Crscope parses files you specify on the command line, or can
 # parse the files that you list in crscope.files.  It writes the
@@ -694,7 +697,7 @@ class Index
       search_term = line[1..]
       results = [] of Result
       case search_type
-      when :symbol, :function
+      when :symbol, :function, :calling, :calledby, :assign
         results = search(search_term, search_type)
       when :text
 	results = grepsearch(search_term, true)

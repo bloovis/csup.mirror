@@ -122,12 +122,16 @@ crscope -l
 ```
 
 This mode is used by MicroEMACS, and it could possibly be used by other editors
-that have cscope integration.  This mode implements only the following search types:
+that have cscope integration.  This mode implements the following search types:
 
 * 0 - find a partially-qualified or unqualified symbol
 * 1 - find the definition of partially-qualified or unqualified method name
-* 6 - regular expression search
+* 2 - find methods called by a method
+* 3 - find methods calling a method
+* 4 - perform a grep -F (non-regexp) search
+* 6 - perform a grep -E (regular expression) search
 * 7 - file search
+* 9 - find assignments to a symbol
 
 Crscope will repreatedly prompt with ">> ", and read a line from standard input.
 The first character of the line is the search type, as described above.  The
